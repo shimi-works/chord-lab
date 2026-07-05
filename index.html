@@ -625,26 +625,42 @@ const rollRows=[]; // {el, midi}
 
 function buildRoll(){
   const body=$('rollBody');
-  for(let midi=TOP_MIDI; midi>=BOT_MIDI; midi--){
-    const row=document.createElement('div');
-    const pc=((midi%12)+12)%12, black=BLACK_PC.has(pc);
-    row.className='roll-row'+(black?' blackrow':'')+(pc===0?' crow':'');
-    const key=document.createElement('div');
-    key.className='row-key '+(black?'black':'white');
-    key.textContent = pc===0 ? 'C'+(Math.floor(midi/12)-1) : (black?'':PC[pc]);
-    const cells=document.createElement('div');
-    cells.className='row-cells'; cells.dataset.midi=midi;
-    // ロール左端の鍵盤：押すとその音が鳴る
-    key.addEventListener('pointerdown',e=>{
-      e.preventDefault(); e.stopPropagation();
-      initAudio(); playNote(midi,AC.currentTime,0.5,0.45);
-      key.classList.add('kdown'); setTimeout(()=>key.classList.remove('kdown'),180);
-    });
-    row.appendChild(key); row.appendChild(cells);
-    body.appendChild(row);
-    rollRows.push({cells, midi});
-  }
+  // 4トラック分のレーンを縦に積む
+  TRACKS.forEach(tr=>{
+    const hd=document.createElement('div');
+    hd.className='track-header tr-h-'+tr; hd.dataset.track=tr;
+    hd.textContent=TRACK_LABEL[tr];
+    hd.addEventListener('pointerdown',e=>{ e.preventDefault(); setActiveTrack(tr); });
+    body.appendChild(hd);
+    for(let midi=TOP_MIDI; midi>=BOT_MIDI; midi--){
+      const row=document.createElement('div');
+      const pc=((midi%12)+12)%12, black=BLACK_PC.has(pc);
+      row.className='roll-row'+(black?' blackrow':'')+(pc===0?' crow':'');
+      const key=document.createElement('div');
+      key.className='row-key '+(black?'black':'white');
+      key.textContent = pc===0 ? 'C'+(Math.floor(midi/12)-1) : (black?'':PC[pc]);
+      const cells=document.createElement('div');
+      cells.className='row-cells'; cells.dataset.midi=midi; cells.dataset.track=tr;
+      const mm=midi, tt=tr;
+      // ロール左端の鍵盤：押すとそのトラックの音色で鳴る
+      key.addEventListener('pointerdown',e=>{
+        e.preventDefault(); e.stopPropagation();
+        initAudio(); playNote(mm,AC.currentTime,0.5,0.45,tt);
+        key.classList.add('kdown'); setTimeout(()=>key.classList.remove('kdown'),180);
+      });
+      row.appendChild(key); row.appendChild(cells);
+      body.appendChild(row);
+      rollRows.push({track:tr, cells, midi});
+    }
+  });
   const sr=document.createElement('div'); sr.id='selRect'; body.appendChild(sr);
+}
+/* クリックしたトラックを編集対象に切り替え */
+function setActiveTrack(tr){
+  if(S.activeTrack===tr) return;
+  S.activeTrack=tr; selNotes.clear();
+  const sel=$('instSel'); if(sel) sel.value=tr;
+  renderTimeline(); save();
 }
 function renderTimeline(){
   const bars=totalBars(), spb=SPB();
@@ -697,21 +713,17 @@ function renderTimeline(){
 }
 function renderNotes(){
   document.querySelectorAll('.note').forEach(n=>n.remove());
-  // 他トラックを薄いゴーストで先に、アクティブトラックを最後に濃く描く
-  for(const tr of TRACKS){
-    if(tr===S.activeTrack) continue;
-    drawTrackNotes(tr, false);
-  }
-  drawTrackNotes(S.activeTrack, true);
+  for(const tr of TRACKS) drawTrackNotes(tr, tr===S.activeTrack);
 }
 function drawTrackNotes(tr, active){
   const mel=S.tracks[tr];
   for(const key in mel){
     const [midi,step]=key.split(':').map(Number);
-    const row=rollRows.find(r=>r.midi===midi);
+    const row=rollRows.find(r=>r.track===tr && r.midi===midi); // そのトラックのレーンの行
     if(!row) continue;
     const n=document.createElement('div');
-    n.className='note tr-'+tr+(active?'':' ghost')+(active&&selNotes.has(key)?' sel':'');
+    // アクティブは編集可(handle付き)。非アクティブは少し暗く表示のみ
+    n.className='note tr-'+tr+(active?'':' dim')+(active&&selNotes.has(key)?' sel':'');
     n.style.left=(step*CW+1)+'px';
     n.style.width=(mel[key]*CW-2)+'px';
     if(active){
@@ -729,9 +741,13 @@ const DRAG_TH=4; // これ以上動いたらドラッグ開始とみなす(px)
 function rollHit(ev){
   const rect=$('rollBody').getBoundingClientRect();
   const x=ev.clientX-rect.left-KEYW, y=ev.clientY-rect.top;
-  const step=Math.floor(x/CW), rowI=Math.floor(y/ROWH);
-  return {x, y, step, rowI, midi:TOP_MIDI-rowI,
-    inGrid: x>=0 && rowI>=0 && rowI<rollRows.length && step>=0 && step<curBars*SPB()};
+  const step=Math.floor(x/CW);
+  const laneIndex=Math.floor(y/LANE_H);
+  const track=TRACKS[laneIndex];
+  const yInLane=y-laneIndex*LANE_H-HEADER_H; // ヘッダ下からの相対
+  const rowI=Math.floor(yInLane/ROWH);
+  return {x, y, step, rowI, track, midi:TOP_MIDI-rowI,
+    inGrid: x>=0 && !!track && yInLane>=0 && rowI>=0 && rowI<ROWS && step>=0 && step<curBars*SPB()};
 }
 /* その位置をカバーしているノートのキーを返す */
 function findNoteAt(midi, step){
@@ -775,27 +791,46 @@ $('rollBody').addEventListener('pointerdown',ev=>{
       grabStep:hit.step, grabMidi:hit.midi};
     renderNotes(); grab(ev); return;
   }
-  // 何もない所 → 押下（moveで矩形選択、離せば配置）
+  // 何もない所
   if(!hit.inGrid) return;
-  rollDrag={mode:'empty-down', x0:ev.clientX, y0:ev.clientY, gx:hit.x, gy:hit.y};
+  if(ev.altKey){ // Alt押しながら → ノート配置（ドラッグで連続配置も可）
+    palAssist=null;
+    rollDrag={mode:'place'}; placeAt(hit);
+  }else{ // Alt無し → 矩形範囲選択（クリックだけなら選択解除）
+    rollDrag={mode:'empty-down', x0:ev.clientX, y0:ev.clientY, gx:hit.x, gy:hit.y};
+  }
   grab(ev);
 });
+/* Alt配置：グリッドに合わせてノートを1つ置く */
+function placeAt(hit){
+  const q=S.quantize||1;
+  const qstep=Math.floor(hit.step/q)*q;
+  const key=hit.midi+':'+qstep;
+  const mel=CM();
+  if(!(key in mel)){
+    mel[key]=q; initAudio(); playNote(hit.midi,AC.currentTime,0.18,0.35);
+    selNotes=new Set([key]); renderNotes();
+  }
+}
 
 $('rollBody').addEventListener('pointermove',ev=>{
   if(!rollDrag) return;
   const hit=rollHit(ev);
   const dx=ev.clientX-(rollDrag.x0||0), dy=ev.clientY-(rollDrag.y0||0);
 
+  if(rollDrag.mode==='place'){ if(hit.inGrid) placeAt(hit); return; } // Altドラッグで連続配置
+
   if(rollDrag.mode==='resize'){
     const key=rollDrag.midi+':'+rollDrag.start;
-    if(!(key in S.melody)) return;
+    const mel=CM();
+    if(!(key in mel)) return;
     const len=Math.max(1, Math.min(hit.step-rollDrag.start+1, curBars*SPB()-rollDrag.start));
-    if(S.melody[key]!==len){
-      S.melody[key]=len;
-      for(const k in S.melody){
+    if(mel[key]!==len){
+      mel[key]=len;
+      for(const k in mel){
         if(k===key) continue;
         const [m,s]=k.split(':').map(Number);
-        if(m===rollDrag.midi && s>rollDrag.start && s<rollDrag.start+len) delete S.melody[k];
+        if(m===rollDrag.midi && s>rollDrag.start && s<rollDrag.start+len) delete mel[k];
       }
       renderNotes();
     }
@@ -805,11 +840,12 @@ $('rollBody').addEventListener('pointermove',ev=>{
   // ノート押下から移動へ移行
   if(rollDrag.mode==='note-down'){
     if(Math.abs(dx)<DRAG_TH && Math.abs(dy)<DRAG_TH) return;
-    const orig=[...selNotes].filter(k=>k in S.melody).map(k=>{
-      const [m,s]=k.split(':').map(Number); return {m,s,len:S.melody[k]};
+    const mel=CM();
+    const orig=[...selNotes].filter(k=>k in mel).map(k=>{
+      const [m,s]=k.split(':').map(Number); return {m,s,len:mel[k]};
     });
     const others={};
-    for(const k in S.melody){ if(!selNotes.has(k)) others[k]=S.melody[k]; }
+    for(const k in mel){ if(!selNotes.has(k)) others[k]=mel[k]; }
     rollDrag={mode:'move', grabStep:rollDrag.grabStep, grabMidi:rollDrag.grabMidi, orig, others};
   }
   if(rollDrag.mode==='move'){
@@ -824,7 +860,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
     dMidi=Math.max(BOT_MIDI-minM, Math.min(TOP_MIDI-maxM, dMidi));
     const nm={...rollDrag.others}, ns=new Set();
     o.forEach(n=>{ const nk=(n.m+dMidi)+':'+(n.s+dStep); nm[nk]=n.len; ns.add(nk); });
-    S.melody=nm; selNotes=ns; renderNotes(); autoScroll(ev);
+    S.tracks[S.activeTrack]=nm; selNotes=ns; renderNotes(); autoScroll(ev);
     return;
   }
 
@@ -972,8 +1008,8 @@ $('btnClearProg').addEventListener('click',()=>{
   S.prog=[]; selBlock=-1; renderTimeline(); save();
 });
 $('btnClearMel').addEventListener('click',()=>{
-  if(Object.keys(S.melody).length && !confirm('メロディを全部消しますか？'))return;
-  S.melody={}; renderTimeline(); save();
+  if(Object.keys(CM()).length && !confirm(`「${S.activeTrack}」トラックのメロディを消しますか？`))return;
+  S.tracks[S.activeTrack]={}; selNotes.clear(); renderTimeline(); save();
 });
 /* ================= U-FRET 取り込み ================= */
 /* コード表記 → このアプリのコード種別へのマッピング（長い表記から順に判定） */
@@ -1090,9 +1126,12 @@ function schedule(){
     const cs = chordStartList.find(c=>c.start===st);
     if(cs) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.22));
     if(S.metro && st%4===0) click(nextTime, st%SPB()===0);
-    for(const key in S.melody){
-      const [midi,ms]=key.split(':').map(Number);
-      if(ms===st) playNote(midi,nextTime,stepDur()*S.melody[key]*0.95,0.42);
+    for(const tr of TRACKS){
+      const mel=S.tracks[tr];
+      for(const key in mel){
+        const [midi,ms]=key.split(':').map(Number);
+        if(ms===st) playNote(midi,nextTime,stepDur()*mel[key]*0.95,0.42,tr);
+      }
     }
     dispQueue.push({step:st,time:nextTime});
     nextTime += stepDur();
@@ -1276,7 +1315,8 @@ function keyPress(midi){
       const q=S.quantize||1;
       const step=Math.max(0, Math.round(lastDisp.step/q)*q);
       const key=midi+':'+step;
-      if(!(key in S.melody)){ S.melody[key]=q; renderNotes(); save(); }
+      const mel=CM();
+      if(!(key in mel)){ mel[key]=q; renderNotes(); save(); }
     }
   }
 }
@@ -1306,7 +1346,7 @@ window.addEventListener('keydown',ev=>{
   }
   if((ev.key==='Delete'||ev.key==='Backspace') && curView==='project'){
     if(selNotes.size){ // 選択メロディノートをまとめて削除
-      for(const k of selNotes) delete S.melody[k];
+      const mel=CM(); for(const k of selNotes) delete mel[k];
       selNotes.clear(); renderTimeline(); save(); return;
     }
     if(selBlock>=0){ S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save(); return; }
@@ -1504,9 +1544,11 @@ function initControls(){
 function transpose(semi){
   if(!semi) return;
   S.prog.forEach(c=>{ c.root=((c.root+semi)%12+12)%12; });
-  const nm={};
-  for(const k in S.melody){ const [m,s]=k.split(':').map(Number); nm[(m+semi)+':'+s]=S.melody[k]; }
-  S.melody=nm;
+  for(const tr of TRACKS){
+    const mel=S.tracks[tr], nm={};
+    for(const k in mel){ const [m,s]=k.split(':').map(Number); nm[(m+semi)+':'+s]=mel[k]; }
+    S.tracks[tr]=nm;
+  }
   S.keyRoot=((S.keyRoot+semi)%12+12)%12;
   $('keyRoot').value=S.keyRoot; $('trTarget').value=S.keyRoot;
   selNotes.clear(); palAssist=null;
@@ -1523,11 +1565,12 @@ $('btnTrTo').addEventListener('click',()=>{
 function applyQuantize(){
   const q=S.quantize; if(q<=1) return;
   const nm={};
-  for(const k in S.melody){
+  const mel=CM(), nm={};
+  for(const k in mel){
     const [m,s]=k.split(':').map(Number);
-    nm[m+':'+(Math.round(s/q)*q)]=S.melody[k]; // 衝突は後勝ち
+    nm[m+':'+(Math.round(s/q)*q)]=mel[k]; // 衝突は後勝ち
   }
-  S.melody=nm; selNotes.clear(); renderTimeline(); save();
+  S.tracks[S.activeTrack]=nm; selNotes.clear(); renderTimeline(); save();
 }
 $('btnQuantize').addEventListener('click',applyQuantize);
 
