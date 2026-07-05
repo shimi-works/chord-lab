@@ -457,12 +457,14 @@ const S = {
   bpm:110, keyRoot:0, scaleType:'major', seventh:false, metro:false,
   beatsPerBar:4,           // 拍子（1小節の拍数）
   quantize:1,              // クオンタイズ（step単位: 1=1/16, 2=1/8, 4=1/4, 8=1/2）
-  instrument:'piano',      // 音色（piano/guitar/bass/drums）
+  activeTrack:'piano',     // 編集中トラック（=音色）
   loop:{on:false,start:0,end:0}, // ループ範囲（step単位）
   prog:[],                 // [{root, q, len}] len=拍数(1〜16)
-  melody:{},               // "midi:step" -> 長さ(16分音符の個数)
+  tracks:{piano:{},guitar:{},bass:{},drums:{}}, // 楽器ごとの独立メロディ "midi:step"->長さ
   quiz:{correct:0,total:0,streak:0,best:0},
 };
+const TRACKS=['piano','guitar','bass','drums'];
+const CM=()=>S.tracks[S.activeTrack]; // 現在編集中トラックのメロディ
 
 const SPB = ()=> S.beatsPerBar*4; // 1小節のステップ数（16分音符の個数）
 function applyBeats(){
@@ -490,7 +492,7 @@ const INST={
 function playNote(midi, when, dur, vel=0.4, inst){
   if(!AC) return;
   if(AC.state==='suspended') AC.resume(); // モバイル等でサスペンドしたまま鳴らない対策
-  inst = inst || S.instrument;
+  inst = inst || S.activeTrack;
   const t = Math.max(when, AC.currentTime);
   if(inst==='drums'){ playDrum(midi,t,vel); return; }
   const p = INST[inst] || INST.piano;
@@ -513,14 +515,15 @@ function playNote(midi, when, dur, vel=0.4, inst){
 // ドラム：音程はないので、ノートの高さで キック/スネア/ハイハット を割り当て
 function playDrum(midi,t,vel){
   const g=AC.createGain(); g.connect(master);
-  if(midi<=52){ // キック
+  // ロール音域(C4-C6)を3分割：下=キック / 中=スネア / 上=ハイハット
+  if(midi<=67){ // キック
     const o=AC.createOscillator(); o.type='sine';
     o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
     o.connect(g);
     g.gain.setValueAtTime(vel*1.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
     o.start(t); o.stop(t+0.2);
   }else{ // スネア/ハイハット（ノイズ）
-    const snare=midi<=64, dur=snare?0.18:0.05;
+    const snare=midi<=75, dur=snare?0.18:0.05;
     const buf=AC.createBuffer(1, Math.ceil(AC.sampleRate*dur), AC.sampleRate);
     const dch=buf.getChannelData(0);
     for(let i=0;i<dch.length;i++) dch[i]=Math.random()*2-1;
@@ -538,7 +541,7 @@ function chordMidis(root,q,base=48){
 }
 function playChordNow(root,q,dur=0.9){
   initAudio();
-  chordMidis(root,q).forEach(m=>playNote(m,AC.currentTime,dur,0.3));
+  chordMidis(root,q).forEach(m=>playNote(m,AC.currentTime,dur,0.3,'piano')); // コードはピアノ固定
 }
 function click(when,accent){
   const o=AC.createOscillator(), g=AC.createGain();
@@ -568,7 +571,8 @@ function chordStarts(){
 }
 function melodyEnd(){
   let mx=0;
-  for(const k in S.melody){ const e=+k.split(':')[1]+S.melody[k]; if(e>mx)mx=e; }
+  for(const tr of TRACKS){ const mel=S.tracks[tr];
+    for(const k in mel){ const e=+k.split(':')[1]+mel[k]; if(e>mx)mx=e; } }
   return mx;
 }
 const contentSteps = ()=> Math.max(progSteps(), melodyEnd());
@@ -581,8 +585,8 @@ function save(){
   saveTimer=setTimeout(()=>{
     localStorage.setItem('chordlab-v1', JSON.stringify({
       bpm:S.bpm,keyRoot:S.keyRoot,scaleType:S.scaleType,seventh:S.seventh,
-      beatsPerBar:S.beatsPerBar, quantize:S.quantize, instrument:S.instrument, loop:S.loop,
-      prog:S.prog, melody:S.melody, quiz:S.quiz,
+      beatsPerBar:S.beatsPerBar, quantize:S.quantize, activeTrack:S.activeTrack, loop:S.loop,
+      prog:S.prog, tracks:S.tracks, quiz:S.quiz,
     }));
   },300);
 }
@@ -593,14 +597,19 @@ function load(){
     Object.assign(S,{bpm:d.bpm??110,keyRoot:d.keyRoot??0,scaleType:d.scaleType??'major',seventh:!!d.seventh});
     S.beatsPerBar=d.beatsPerBar||4;
     S.quantize=d.quantize||1;
-    S.instrument=d.instrument||'piano';
+    S.activeTrack=d.activeTrack||d.instrument||'piano';
     S.loop=d.loop&&d.loop.end>d.loop.start ? d.loop : {on:false,start:0,end:0};
     S.prog=(d.prog||[]).map(c=>({root:c.root,q:c.q,len:c.len||4}));
-    if(Array.isArray(d.melody)){ // 旧形式（長さなし）からの移行
-      S.melody={}; d.melody.forEach(k=>S.melody[k]=1);
-    }else{
-      S.melody=d.melody||{};
+    // トラック復元（旧・単一melodyからの移行含む）
+    S.tracks={piano:{},guitar:{},bass:{},drums:{}};
+    if(d.tracks){
+      for(const tr of TRACKS) if(d.tracks[tr]) S.tracks[tr]=d.tracks[tr];
+    }else if(Array.isArray(d.melody)){
+      d.melody.forEach(k=>S.tracks.piano[k]=1);
+    }else if(d.melody){
+      S.tracks.piano=d.melody;
     }
+    if(!TRACKS.includes(S.activeTrack)) S.activeTrack='piano';
     Object.assign(S.quiz,d.quiz||{});
   }catch(e){}
 }
@@ -688,16 +697,27 @@ function renderTimeline(){
 }
 function renderNotes(){
   document.querySelectorAll('.note').forEach(n=>n.remove());
-  for(const key in S.melody){
+  // 他トラックを薄いゴーストで先に、アクティブトラックを最後に濃く描く
+  for(const tr of TRACKS){
+    if(tr===S.activeTrack) continue;
+    drawTrackNotes(tr, false);
+  }
+  drawTrackNotes(S.activeTrack, true);
+}
+function drawTrackNotes(tr, active){
+  const mel=S.tracks[tr];
+  for(const key in mel){
     const [midi,step]=key.split(':').map(Number);
     const row=rollRows.find(r=>r.midi===midi);
     if(!row) continue;
     const n=document.createElement('div');
-    n.className='note'+(selNotes.has(key)?' sel':'');
+    n.className='note tr-'+tr+(active?'':' ghost')+(active&&selNotes.has(key)?' sel':'');
     n.style.left=(step*CW+1)+'px';
-    n.style.width=(S.melody[key]*CW-2)+'px';
-    n.dataset.key=key;
-    n.innerHTML='<div class="note-handle" title="ドラッグで長さ変更"></div>';
+    n.style.width=(mel[key]*CW-2)+'px';
+    if(active){
+      n.dataset.key=key;
+      n.innerHTML='<div class="note-handle" title="ドラッグで長さ変更"></div>';
+    }
     row.cells.appendChild(n);
   }
 }
@@ -715,16 +735,17 @@ function rollHit(ev){
 }
 /* その位置をカバーしているノートのキーを返す */
 function findNoteAt(midi, step){
-  for(const k in S.melody){
+  const mel=CM();
+  for(const k in mel){
     const [m,s]=k.split(':').map(Number);
-    if(m===midi && step>=s && step<s+S.melody[k]) return k;
+    if(m===midi && step>=s && step<s+mel[k]) return k;
   }
   return null;
 }
 /* ノートの矩形（rollBody基準px） */
 function noteRect(key){
   const [m,s]=key.split(':').map(Number);
-  return {x:KEYW+s*CW, y:(TOP_MIDI-m)*ROWH, w:S.melody[key]*CW, h:ROWH};
+  return {x:KEYW+s*CW, y:(TOP_MIDI-m)*ROWH, w:CM()[key]*CW, h:ROWH};
 }
 function grab(ev){ try{ $('rollBody').setPointerCapture(ev.pointerId); }catch(e){} }
 /* ドラッグがビュー端に来たら横スクロール */
@@ -1473,8 +1494,10 @@ function initControls(){
   $('quantSel').value=S.quantize;
   $('quantSel').addEventListener('change',e=>{ S.quantize=+e.target.value; save(); });
   // 楽器（音色）
-  $('instSel').value=S.instrument;
-  $('instSel').addEventListener('change',e=>{ S.instrument=e.target.value; save(); });
+  $('instSel').value=S.activeTrack;
+  $('instSel').addEventListener('change',e=>{
+    S.activeTrack=e.target.value; selNotes.clear(); renderTimeline(); save();
+  });
 }
 
 /* ================= 移調・クオンタイズ ================= */
