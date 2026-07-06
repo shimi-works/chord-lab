@@ -206,8 +206,19 @@
   }
   .quiz-top{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px}
   .seg{display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden}
-  .seg button{background:var(--panel2); border:none; color:var(--txt-dim); padding:6px 12px; font-size:12px}
+  .seg button{background:var(--panel2); border:none; color:var(--txt-dim); padding:6px 12px; font-size:12px; cursor:pointer}
   .seg button.on{background:var(--accent2); color:#fff}
+  /* コード解説 */
+  .exp-sec{margin-bottom:18px; padding-bottom:16px; border-bottom:1px solid var(--line)}
+  .exp-sec:last-child{border-bottom:none}
+  .exp-sec h3{font-size:17px; color:#fff; margin-bottom:6px}
+  .exp-sec p{font-size:14px; line-height:1.8; color:var(--txt)}
+  .exp-sec p b{color:var(--orange)}
+  .exp-btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .exp-play{background:linear-gradient(#1f6fd8,#155bb8); border:1px solid #0d3f85; color:#fff;
+    border-radius:20px; padding:7px 14px; font-size:13px; cursor:pointer}
+  .exp-play:hover{filter:brightness(1.12)}
+  .exp-play:active{transform:translateY(1px)}
   #qText{font-size:26px; font-weight:700; color:#fff; margin:14px 0 4px; min-height:38px}
   #qText b{color:var(--orange); font-size:34px}
   #qSub{color:var(--txt-dim); font-size:12px; min-height:18px}
@@ -256,6 +267,27 @@
   ::-webkit-scrollbar-track{background:#1b1b1f}
   ::-webkit-scrollbar-thumb{background:#3c3c44;border-radius:5px;border:2px solid #1b1b1f}
   ::-webkit-scrollbar-thumb:hover{background:#4a4a54}
+  /* 作曲講座パネル（プロジェクト画面の上に浮かせる） */
+  #coursePanel{display:none; position:fixed; right:16px; bottom:150px; width:340px; z-index:60;
+    background:linear-gradient(#2b2f3a,#23262e); border:1px solid var(--accent2);
+    border-radius:12px; box-shadow:0 12px 34px rgba(0,0,0,.55); padding:14px 16px}
+  .cp-head{display:flex; align-items:center; gap:8px; font-weight:700; color:#fff; font-size:13px; margin-bottom:8px}
+  #cpStep{margin-left:auto; font-size:12px; color:var(--accent); font-weight:700}
+  #cpClose{background:transparent; border:none; color:var(--txt-dim); font-size:18px; cursor:pointer; line-height:1; padding:0 2px}
+  #cpClose:hover{color:#fff}
+  .cp-title{font-size:18px; font-weight:700; color:#ffd479; margin-bottom:6px}
+  .cp-body{font-size:13px; line-height:1.75; color:var(--txt); margin-bottom:10px}
+  .cp-task{font-size:13px; color:#fff; background:rgba(74,158,255,.16); border:1px solid var(--accent2);
+    border-radius:8px; padding:8px 10px; margin-bottom:8px}
+  .cp-task b{color:#ffd479}
+  .cp-status{font-size:13px; font-weight:700; min-height:20px; margin-bottom:10px}
+  .cp-status.ok{color:var(--green)} .cp-status.wait{color:var(--txt-dim)}
+  .cp-nav{display:flex; gap:8px}
+  .cp-nav button{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:7px; padding:9px; font-size:14px; cursor:pointer}
+  .cp-nav button:hover:not(:disabled){border-color:var(--accent)}
+  .cp-nav button.primary{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a; color:#fff; font-weight:700}
+  .cp-nav button:disabled{opacity:.4; cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -310,7 +342,21 @@
   </div>
   <div class="tabs">
     <button class="tab on" id="tabProject">🎼 プロジェクト</button>
+    <button class="tab" id="tabCourse">🎓 作曲講座</button>
     <button class="tab" id="tabQuiz">🎯 コード練習</button>
+  </div>
+</div>
+
+<!-- ============ 作曲講座パネル ============ -->
+<div id="coursePanel">
+  <div class="cp-head"><span>🎓 作曲講座</span><span id="cpStep">1 / 5</span><button id="cpClose" title="閉じる">×</button></div>
+  <div class="cp-title" id="cpTitle"></div>
+  <div class="cp-body" id="cpBody"></div>
+  <div class="cp-task" id="cpTask"></div>
+  <div class="cp-status" id="cpStatus"></div>
+  <div class="cp-nav">
+    <button id="cpPrev">◀ 戻る</button>
+    <button id="cpNext" class="primary">次へ ▶</button>
   </div>
 </div>
 
@@ -432,6 +478,12 @@
   <!-- ============ quiz view ============ -->
   <div class="view" id="quizView">
     <div id="quizCard">
+      <div class="seg" id="learnModeSeg" style="margin-bottom:14px">
+        <button data-lm="explain" class="on">📖 コード解説を読む</button>
+        <button data-lm="quiz">🎯 クイズに挑戦</button>
+      </div>
+      <div id="explainBox"></div>
+      <div id="quizInner" style="display:none">
       <div class="quiz-top">
         <div class="seg" id="qModeSeg">
           <button data-mode="press" class="on">🎹 鍵盤で押さえる</button>
@@ -460,6 +512,7 @@
         <div class="streak">連続正解<b id="stStreak">0</b></div>
         <div>ベスト連続<b id="stBest">0</b></div>
       </div>
+      </div><!-- /quizInner -->
     </div>
   </div>
 </div>
@@ -1655,18 +1708,164 @@ $('qModeSeg').addEventListener('click',ev=>{
 });
 $('qLevel').addEventListener('change',newQuestion);
 
+/* ================= コード解説 ================= */
+// [🔊 ...] のボタンは data-play="root:q,root:q,..." を順に鳴らす
+const EXPLAIN_HTML = `
+<div class="exp-sec">
+  <h3>🎹 コードって何？</h3>
+  <p>コードとは、<b>2つ以上の音を同時に鳴らしたもの</b>のこと。たとえば「ド・ミ・ソ」を一緒に鳴らすと、明るい「C（シー）」というコードになります。曲の“土台”になる響きです。</p>
+  <div class="exp-btns"><button class="exp-play" data-play="0:">🔊 ド・ミ・ソ（C）を聞く</button></div>
+</div>
+<div class="exp-sec">
+  <h3>😊 メジャー と 😢 マイナー のちがい</h3>
+  <p>いちばん大事な2種類。<b>メジャー＝明るい</b>、<b>マイナー＝暗い・切ない</b>。ちがいは真ん中の音が<b>半音下がるだけ</b>。ド・ミ・ソ→ド・<b>ミ♭</b>・ソ にするとマイナーになります。聞き比べてみて！</p>
+  <div class="exp-btns">
+    <button class="exp-play" data-play="0:">🔊 C（明るい）</button>
+    <button class="exp-play" data-play="0:m">🔊 Cm（暗い）</button>
+  </div>
+</div>
+<div class="exp-sec">
+  <h3>✨ 7th（セブンス）って？</h3>
+  <p>コードに<b>4つ目の音を足した</b>もの。ちょっと<b>大人っぽく・おしゃれ</b>な響きになります。ジャズやおしゃれな曲でよく使います。C→C7→CM7 と足していくと雰囲気が変わるのが分かります。</p>
+  <div class="exp-btns">
+    <button class="exp-play" data-play="0:">🔊 C</button>
+    <button class="exp-play" data-play="0:7">🔊 C7</button>
+    <button class="exp-play" data-play="0:maj7">🔊 CM7</button>
+  </div>
+</div>
+<div class="exp-sec">
+  <h3>🌫️ sus4（サスフォー）って？</h3>
+  <p>真ん中の音を<b>ちょっと上げた</b>コード。<b>宙に浮いたような、次に進みたくなる</b>響きです。sus4 → ふつうのコード、と続けると“解決”した気持ちよさがあります。</p>
+  <div class="exp-btns">
+    <button class="exp-play" data-play="0:sus4">🔊 Csus4</button>
+    <button class="exp-play" data-play="0:sus4,0:">🔊 Csus4 → C（解決）</button>
+  </div>
+</div>
+<div class="exp-sec">
+  <h3>😵 dim / aug（ちょっと不安な音）</h3>
+  <p><b>dim（ディミニッシュ）</b>と<b>aug（オーギュメント）</b>は、<b>不安定でハラハラする</b>響き。使いすぎず“味付け”に。</p>
+  <div class="exp-btns">
+    <button class="exp-play" data-play="0:dim">🔊 Cdim</button>
+    <button class="exp-play" data-play="0:aug">🔊 Caug</button>
+  </div>
+</div>
+<div class="exp-sec">
+  <h3>🎼 つぎのステップ</h3>
+  <p>コードが分かったら、上の「🎯 クイズに挑戦」で練習！ さらに、上部タブの「🎓 作曲講座」で、コード→ベース→ドラム→メロディ→ギターと順番に曲を作れます。</p>
+</div>`;
+function renderExplain(){
+  const box=$('explainBox'); if(!box) return;
+  box.innerHTML=EXPLAIN_HTML;
+  box.querySelectorAll('.exp-play').forEach(btn=>{
+    btn.addEventListener('click',async ()=>{
+      const seq=btn.dataset.play.split(',');
+      for(let i=0;i<seq.length;i++){
+        const [root,q]=seq[i].split(':');
+        playChordNow(+root, q||'', 0.9);
+        if(i<seq.length-1) await new Promise(r=>setTimeout(r,750));
+      }
+    });
+  });
+}
+let learnMode='explain';
+function setLearnMode(m){
+  learnMode=m;
+  $('explainBox').style.display = m==='explain'?'block':'none';
+  $('quizInner').style.display  = m==='quiz'?'block':'none';
+  [...$('learnModeSeg').children].forEach(c=>c.classList.toggle('on',c.dataset.lm===m));
+  if(m==='quiz' && !qCur) newQuestion();
+}
+$('learnModeSeg').addEventListener('click',ev=>{
+  const b=ev.target.closest('button'); if(b) setLearnMode(b.dataset.lm);
+});
+
 /* ================= タブ / 設定 ================= */
 function setView(v){
   curView=v;
-  $('projectView').classList.toggle('on',v==='project');
+  const proj=(v==='project'||v==='course'); // 講座もロールを使うのでプロジェクト画面を表示
+  $('projectView').classList.toggle('on',proj);
   $('quizView').classList.toggle('on',v==='quiz');
   $('tabProject').classList.toggle('on',v==='project');
+  $('tabCourse').classList.toggle('on',v==='course');
   $('tabQuiz').classList.toggle('on',v==='quiz');
+  $('coursePanel').style.display = v==='course'?'block':'none';
   clearKbdMarks(); litChord(null);
-  if(v==='quiz'){ stop(); if(!qCur) newQuestion(); }
+  if(v==='quiz'){ stop(); setLearnMode(learnMode); }
+  if(v==='course'){ renderCourse(); startCourseTick(); } else { stopCourseTick(); }
 }
 $('tabProject').addEventListener('click',()=>setView('project'));
+$('tabCourse').addEventListener('click',()=>setView('course'));
 $('tabQuiz').addEventListener('click',()=>setView('quiz'));
+
+/* ================= 作曲講座（ガイド付き・条件クリアで次へ） ================= */
+const COURSE=[
+  {title:'① コードを置こう', track:'piano',
+   body:'コードは曲の“土台”です。左の<b>パレット</b>からコードを、右の<b>コードレーン</b>へドラッグして置いてみよう。上の「プリセット進行」（王道進行など）を使ってもOK。',
+   task:'コードを <b>3つ以上</b> 置く', hint:'左パレットのコードをコードレーンへドラッグ',
+   check:()=>S.prog.length>=3},
+  {title:'② ベースを入れよう', track:'bass',
+   body:'ベースは低音で曲を支える大黒柱。上の「トラック」を<b>🎸ベース</b>に切り替えました。ベースのロールに、コードの一番下の音（ルート）を<b>Altを押しながらクリック</b>で置こう。',
+   task:'ベースの音を <b>3つ以上</b> 置く', hint:'Alt＋クリックでベースのロールに配置',
+   check:()=>Object.keys(S.tracks.bass).length>=3},
+  {title:'③ ドラムを入れよう', track:'drums',
+   body:'ドラムはリズムの心臓。「トラック」を<b>🥁ドラム</b>にしました。ロールの<b>下＝キック</b>、<b>中＝スネア</b>、<b>上＝ハット</b>。キックとスネアを交互に置いてみよう。',
+   task:'ドラムを <b>4つ以上</b> 置く', hint:'下段キック→中段スネアを交互に',
+   check:()=>Object.keys(S.tracks.drums).length>=4},
+  {title:'④ メロディを入れよう', track:'piano',
+   body:'メロディは曲の主役＝“歌”になる部分。「トラック」を<b>🎹ピアノ</b>にしました。コードに合う音を、高めの位置に置いていこう。',
+   task:'メロディ（ピアノ）を <b>4つ以上</b> 置く', hint:'コードの構成音から選ぶと合いやすい',
+   check:()=>Object.keys(S.tracks.piano).length>=4},
+  {title:'⑤ ギターで厚みを', track:'guitar',
+   body:'仕上げにギター。「トラック」を<b>🎸ギター</b>にしました。コードと同じ音を重ねると厚みが出ます。置いたら▶で再生して完成を聞いてみよう！',
+   task:'ギターを <b>3つ以上</b> 置く', hint:'コードと同じ音を重ねる',
+   check:()=>Object.keys(S.tracks.guitar).length>=3},
+];
+let courseStep=0, courseTimer=null, courseDone=false;
+function renderCourse(){
+  const s=COURSE[courseStep];
+  $('cpStep').textContent=(courseStep+1)+' / '+COURSE.length;
+  $('cpTitle').textContent=s.title;
+  $('cpBody').innerHTML=s.body;
+  $('cpTask').innerHTML='🎯 目標：'+s.task+'　<span style="color:var(--txt-dim)">（'+s.hint+'）</span>';
+  // そのステップの担当トラックに自動で切替（コード除く）
+  if(s.track && S.activeTrack!==s.track){ S.activeTrack=s.track; const el=$('instSel'); if(el) el.value=s.track; renderTimeline(); }
+  $('cpPrev').disabled = courseStep===0;
+  courseCheck();
+}
+function courseCheck(){
+  const s=COURSE[courseStep];
+  const done=s.check();
+  const nx=$('cpNext'), st=$('cpStatus');
+  nx.disabled=!done;
+  if(done){
+    st.className='cp-status ok';
+    st.textContent = courseStep===COURSE.length-1 ? '✅ 条件クリア！「完成する」で仕上げ' : '✅ できた！「次へ」を押そう';
+    nx.textContent = courseStep===COURSE.length-1 ? '完成する 🎉' : '次へ ▶';
+  }else{
+    st.className='cp-status wait';
+    st.textContent='⏳ 目標を達成すると「次へ」が押せます';
+    nx.textContent = courseStep===COURSE.length-1 ? '完成する 🎉' : '次へ ▶';
+  }
+}
+function startCourseTick(){ stopCourseTick(); courseTimer=setInterval(courseCheck,400); }
+function stopCourseTick(){ if(courseTimer){ clearInterval(courseTimer); courseTimer=null; } }
+$('cpNext').addEventListener('click',()=>{
+  if(courseDone){ // 完成後の「もう一度」
+    courseDone=false; courseStep=0; renderCourse(); startCourseTick(); return;
+  }
+  if(!COURSE[courseStep].check()) return;
+  if(courseStep<COURSE.length-1){ courseStep++; renderCourse(); }
+  else { // 完成
+    courseDone=true; stopCourseTick();
+    $('cpTitle').textContent='🎉 完成！おめでとう';
+    $('cpBody').innerHTML='コード・ベース・ドラム・メロディ・ギターが揃いました。<b>▶で再生</b>して聞いてみよう。「マイソング」で保存や共有もできます。';
+    $('cpTask').innerHTML=''; $('cpStatus').textContent=''; $('cpStatus').className='cp-status';
+    $('cpNext').textContent='もう一度 ▶'; $('cpNext').disabled=false;
+    play();
+  }
+});
+$('cpPrev').addEventListener('click',()=>{ if(courseStep>0){ courseStep--; renderCourse(); } });
+$('cpClose').addEventListener('click',()=>setView('project'));
 
 function initControls(){
   const ks=$('keyRoot');
@@ -1782,6 +1981,7 @@ renderPalette();
 renderTimeline();
 updateLoopBtn();
 renderStats();
+renderExplain();
 renderSongList();
 $('btnSaveSong').addEventListener('click',saveSong);
 $('btnShareSong').addEventListener('click',shareCurrent);
