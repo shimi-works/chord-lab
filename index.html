@@ -115,6 +115,18 @@
   .sm-btn:hover{border-color:var(--accent)}
   .sm-btn.danger:hover{border-color:var(--red); color:var(--red)}
   .hint-txt{font-size:11px; color:var(--txt-dim); line-height:1.6; margin-top:6px}
+  /* コード提案（代理・次の一手） */
+  .sug-cur{font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .func-tag{font-size:10px; font-weight:700; color:#0d0d0d; padding:2px 7px; border-radius:10px; letter-spacing:.5px}
+  .sug-lbl{font-size:11px; color:var(--txt-dim); margin:8px 0 5px; font-weight:600}
+  .sug-row{display:flex; flex-wrap:wrap; gap:5px}
+  .sug-chip{background:linear-gradient(#3a3a42,#2b2b31); border:1px solid #1a1a1e; border-radius:5px;
+    color:var(--txt); cursor:pointer; padding:4px 8px; text-align:center; line-height:1.25; min-width:44px}
+  .sug-chip:hover{border-color:var(--accent)}
+  .sug-chip .sc-deg{display:block; font-size:9px; color:var(--txt-dim)}
+  .sug-chip .sc-nm{display:block; font-size:13px; font-weight:600}
+  .sug-chip.rep{border-color:#3a6b52} .sug-chip.rep:hover{border-color:#4a9e6b}
+  .sug-chip.next{border-color:#6b5a3a} .sug-chip.next:hover{border-color:#c8963a}
 
   /* ---------- timeline ---------- */
   #tlScroll{flex:1; min-width:0; overflow:auto; background:#212126; position:relative}
@@ -453,13 +465,21 @@
           <button class="sm-btn" id="btnSaveSong">💾 保存</button>
           <button class="sm-btn" id="btnShareSong">🔗 共有リンク</button>
         </div>
-        <div class="hint-txt" id="songStatus">保存で一覧に追加／「共有リンク」でURLをコピー</div>
+        <div class="insp-row">
+          <button class="sm-btn" id="btnExportMidi" title="MIDIファイル(.mid)として書き出し。Cubase等のDAWに読み込めます">🎹 MIDI書き出し (.mid)</button>
+        </div>
+        <div class="hint-txt" id="songStatus">保存で一覧に追加／「共有リンク」でURLをコピー／MIDIでDAWへ持ち出し</div>
         <div id="songList"></div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">コードパレット</div>
         <div id="palette"></div>
         <div class="hint-txt"><b>コードレーンへドラッグ</b>＝進行に追加／<b>ピアノロールへドラッグ</b>＝その和音を音符で配置。<b>タップ</b>で構成音を赤く表示（試聴）。</div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">🎵 コード提案（代理・次の一手）</div>
+        <div id="suggestBox"></div>
+        <div class="hint-txt"><b>🔄代理</b>＝選択中コードと同じ役割で置き換え可能／<b>➡次</b>＝自然につながる次のコード。クリックで反映＆試聴。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">★ お気に入りコード</div>
@@ -517,6 +537,17 @@
         </div>
         <div class="hint-txt" id="blockLenLabel">長さ: --</div>
         <div class="hint-txt">ブロック：クリックで選択＆試聴 / ダブルクリックで削除 / 右端をドラッグで長さ変更（1〜16拍）</div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">✂ 選択ノートの編集（コピー）</div>
+        <div class="insp-row">
+          <button class="sm-btn" id="btnCopyNotes" title="選択したノートをコピー (Ctrl+C)">📋 コピー</button>
+          <button class="sm-btn" id="btnPasteNotes" title="コピーしたノートを貼り付け (Ctrl+V)">📌 貼り付け</button>
+        </div>
+        <div class="insp-row">
+          <button class="sm-btn" id="btnDupNotes" title="選択ノートをすぐ右に複製 (Ctrl+D)。連打で繰り返しが作れます">⧉ 右へ複製</button>
+        </div>
+        <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>右へ複製</b>は2小節を繰り返す等に便利（<b>Ctrl+C / V / D</b>）。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">移調（キー一括変更）</div>
@@ -1115,6 +1146,7 @@ function renderTimeline(){
   });
   renderLoop();
   renderNotes();
+  renderSuggest();
 }
 function renderNotes(){
   document.querySelectorAll('.note').forEach(n=>n.remove());
@@ -1172,6 +1204,152 @@ function glueNote(key){
   selNotes.clear(); renderTimeline(); save();
 }
 document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+
+/* ===== ノートのコピー／貼り付け／複製 =====
+   選択ノートを正規化して保持（音程は絶対、開始stepは最小からの相対）。 */
+let clip=null, pasteCursor=0;
+function copySel(){
+  if(!selNotes.size) return false;
+  const mel=CM(); let minS=Infinity, maxE=0; const arr=[];
+  for(const k of selNotes){ if(!(k in mel)) continue;
+    const [m,s]=k.split(':').map(Number); minS=Math.min(minS,s); maxE=Math.max(maxE,s+mel[k]);
+    arr.push({m,s,len:mel[k]}); }
+  if(!arr.length) return false;
+  clip={notes:arr.map(n=>({dm:n.m, ds:n.s-minS, len:n.len})), w:Math.max(1,maxE-minS)};
+  pasteCursor=maxE;                 // 次の貼り付けはコピー元のすぐ右
+  const st=$('clipStatus'); if(st) st.textContent=`${arr.length}個のノートをコピーしました（貼り付け/複製で使えます）`;
+  return true;
+}
+function pasteAt(anchorStep){
+  if(!clip) return false;
+  const mel=CM(), maxStep=curBars*SPB(), ns=new Set();
+  clip.notes.forEach(n=>{
+    const st=anchorStep+n.ds; if(st<0||st>=maxStep) return;
+    const len=Math.min(n.len, maxStep-st); if(len<=0) return;
+    const key=n.dm+':'+st; mel[key]=len; ns.add(key);
+  });
+  if(!ns.size) return false;
+  selNotes=ns; renderTimeline(); save();
+  initAudio(); return true;
+}
+function doPaste(){ if(pasteAt(pasteCursor)) pasteCursor+=clip.w; }
+function doDuplicate(){ if(copySel()) doPaste(); } // 選択→すぐ右へ。連打で繰り返しが伸びる
+
+/* ===== MIDI書き出し（Standard MIDI File / format 1） ===== */
+function downloadBlob(blob, name){
+  const a=document.createElement('a'), url=URL.createObjectURL(blob);
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function exportMidi(){
+  const TPQN=480, stepTicks=TPQN/4; // 1step(=1/16音符)=120ticks
+  const u32=n=>[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255];
+  const u16=n=>[(n>>>8)&255,n&255];
+  const vlq=n=>{ const b=[n&0x7f]; n=Math.floor(n/128); while(n>0){ b.unshift((n&0x7f)|0x80); n=Math.floor(n/128); } return b; };
+  const sb=s=>[...s].map(c=>c.charCodeAt(0));
+  const trackChunk=events=>{
+    events.sort((a,b)=>a.t-b.t || (a.o||0)-(b.o||0)); // 同tickは note-off(0)を先に
+    let bytes=[], last=0;
+    for(const e of events){ bytes.push(...vlq(e.t-last), ...e.d); last=e.t; }
+    bytes.push(0x00,0xff,0x2f,0x00); // end of track
+    return [...sb('MTrk'), ...u32(bytes.length), ...bytes];
+  };
+  const usPerBeat=Math.round(60000000/S.bpm);
+  const tracks=[];
+  // Track0: テンポ・拍子
+  tracks.push(trackChunk([
+    {t:0,d:[0xff,0x51,0x03,(usPerBeat>>16)&255,(usPerBeat>>8)&255,usPerBeat&255]},
+    {t:0,d:[0xff,0x58,0x04,S.beatsPerBar,2,24,8]},
+  ]));
+  const GM={piano:0, guitar:25, bass:33};
+  const CHNAME={piano:'Piano', guitar:'Guitar', bass:'Bass', drums:'Drums'};
+  TRACKS.forEach((tr,ti)=>{
+    const mel=S.tracks[tr], keys=Object.keys(mel); if(!keys.length) return;
+    const ch=(tr==='drums')?9:ti; const ev=[];
+    ev.push({t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb(CHNAME[tr]))]}); // トラック名
+    if(tr!=='drums') ev.push({t:0,d:[0xC0|ch, GM[tr]||0]});
+    for(const k of keys){ const [m,s]=k.split(':').map(Number);
+      const note=(tr==='drums') ? (m<=67?36 : m<=75?38 : 42) : m;
+      const st=s*stepTicks, du=Math.max(1,mel[k]*stepTicks);
+      ev.push({t:st,o:1,d:[0x90|ch,note,90]});
+      ev.push({t:st+du,o:0,d:[0x80|ch,note,64]});
+    }
+    tracks.push(trackChunk(ev));
+  });
+  // コード進行トラック（ch3・ピアノ音色）
+  const cs=chordStarts();
+  if(cs.length){
+    const ch=3, ev=[{t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb('Chords'))]},{t:0,d:[0xC0|ch,0]}];
+    cs.forEach(c=>{ const st=c.start*stepTicks, du=Math.max(1,c.steps*stepTicks);
+      chordMidis(c.ch.root,c.ch.q,48).forEach(n=>{
+        ev.push({t:st,o:1,d:[0x90|ch,n,70]}); ev.push({t:st+du,o:0,d:[0x80|ch,n,64]}); });
+    });
+    tracks.push(trackChunk(ev));
+  }
+  const header=[...sb('MThd'), ...u32(6), ...u16(1), ...u16(tracks.length), ...u16(TPQN)];
+  const all=header.slice(); tracks.forEach(t=>all.push(...t));
+  const name=(($('songName').value||'').trim()||'chordlab').replace(/[\\/:*?"<>|]/g,'_')+'.mid';
+  downloadBlob(new Blob([new Uint8Array(all)],{type:'audio/midi'}), name);
+  const st=$('songStatus'); if(st) st.textContent='MIDIを書き出しました: '+name;
+}
+
+/* ===== コード提案（機能和声：代理コード・次の一手） ===== */
+const FUNCG={ // 度数index(0..6)を機能(T/S/D)に分類（メジャー・マイナー共通の並び）
+  T:[0,2,5], S:[1,3], D:[4,6] };
+const FUNC_JA={T:'トニック（安定）', S:'サブドミナント（展開）', D:'ドミナント（緊張）'};
+const FUNC_COLOR={T:'#4a9e6b', S:'#c8963a', D:'#c85a5a'};
+function degIndexOf(root,q){ const dia=diatonic(); for(let i=0;i<dia.length;i++){ if(dia[i].root===root&&dia[i].q===q) return i; } return -1; }
+function funcOfIndex(i){ for(const f in FUNCG) if(FUNCG[f].includes(i)) return f; return null; }
+const nextFuncs=f=> f==='T'?['S','D'] : f==='S'?['D','T'] : f==='D'?['T','S'] : ['T','S','D'];
+function sugChip(root,q,roman,act){
+  return `<button class="sug-chip ${act}" data-act="${act}" data-root="${root}" data-q="${q}">`+
+         `<span class="sc-deg">${roman||''}</span><span class="sc-nm">${chordName(root,q)}</span></button>`;
+}
+function renderSuggest(){
+  const box=$('suggestBox'); if(!box) return;
+  const dia=diatonic();
+  let target=null, targetIdx=-1;
+  if(selBlock>=0 && S.prog[selBlock]){ target=S.prog[selBlock]; targetIdx=selBlock; }
+  else if(palAssist){ target=palAssist; }
+  else if(S.prog.length){ target=S.prog[S.prog.length-1]; targetIdx=S.prog.length-1; }
+  let html='';
+  if(!target){
+    html='<div class="hint-txt" style="margin-top:0">コードを選ぶと代理・次の一手を提案します。下は今のキーで使えるコード：</div>';
+    html+='<div class="sug-row" style="margin-top:6px">'+dia.map(d=>sugChip(d.root,d.q,d.roman,'add')).join('')+'</div>';
+    box.innerHTML=html; wireSuggest(box,-1); return;
+  }
+  const i=degIndexOf(target.root,target.q), f=(i>=0)?funcOfIndex(i):null;
+  html+=`<div class="sug-cur">対象: <b>${chordName(target.root,target.q)}</b>`;
+  html+= f ? ` <span class="func-tag" style="background:${FUNC_COLOR[f]}">${FUNC_JA[f]}</span>` : ` <span style="font-size:11px;color:var(--txt-dim)">キー外のコード</span>`;
+  html+='</div>';
+  if(f){
+    const subs=FUNCG[f].filter(x=>x!==i);
+    html+='<div class="sug-lbl">🔄 代理コード（同じ役割・置き換え可）</div>';
+    html+='<div class="sug-row">'+subs.map(x=>sugChip(dia[x].root,dia[x].q,dia[x].roman,'rep')).join('')+'</div>';
+    const nextIdx=[]; nextFuncs(f).forEach(ff=>FUNCG[ff].forEach(x=>{ if(!nextIdx.includes(x)) nextIdx.push(x); }));
+    html+='<div class="sug-lbl">➡ 次の一手におすすめ</div>';
+    html+='<div class="sug-row">'+nextIdx.map(x=>sugChip(dia[x].root,dia[x].q,dia[x].roman,'next')).join('')+'</div>';
+  }else{
+    html+='<div class="sug-lbl">このキーで使えるコード</div>';
+    html+='<div class="sug-row">'+dia.map(d=>sugChip(d.root,d.q,d.roman,'add')).join('')+'</div>';
+  }
+  box.innerHTML=html; wireSuggest(box,targetIdx);
+}
+function wireSuggest(box,targetIdx){
+  box.querySelectorAll('.sug-chip').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const root=+b.dataset.root, q=b.dataset.q, act=b.dataset.act;
+      if(act==='rep' && targetIdx>=0 && S.prog[targetIdx]){
+        S.prog[targetIdx].root=root; S.prog[targetIdx].q=q; selBlock=targetIdx;
+      }else if(act==='next' && targetIdx>=0){
+        S.prog.splice(targetIdx+1,0,{root,q,len:S.beatsPerBar}); selBlock=targetIdx+1;
+      }else{
+        S.prog.push({root,q,len:S.beatsPerBar}); selBlock=S.prog.length-1;
+      }
+      palAssist=null; recordRecentChord(root,q); renderTimeline(); save(); playChordNow(root,q);
+    });
+  });
+}
 function rollHit(ev){
   const rect=$('rollBody').getBoundingClientRect();
   const x=ev.clientX-rect.left-KEYW, y=ev.clientY-rect.top;
@@ -1903,6 +2081,13 @@ window.addEventListener('keydown',ev=>{
   // Ctrl+Z / Ctrl+Y（入力欄にいる時以外）
   if((ev.ctrlKey||ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase()==='z' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); undo(); return; }
   if((ev.ctrlKey||ev.metaKey) && (ev.key.toLowerCase()==='y' || (ev.shiftKey && ev.key.toLowerCase()==='z')) && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); redo(); return; }
+  // ノートのコピー/貼り付け/複製（入力欄以外・プロジェクト画面）
+  if((ev.ctrlKey||ev.metaKey) && curView==='project' && tag!=='INPUT' && tag!=='TEXTAREA'){
+    const kk=ev.key.toLowerCase();
+    if(kk==='c'){ ev.preventDefault(); copySel(); return; }
+    if(kk==='v'){ ev.preventDefault(); doPaste(); return; }
+    if(kk==='d'){ ev.preventDefault(); doDuplicate(); return; }
+  }
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
   if(ev.code==='Space'){ ev.preventDefault(); if(curView==='project') play(); return; }
   if(ev.key==='Enter' && quizActive() && qMode==='press'){ judge(); return; }
@@ -2413,6 +2598,10 @@ renderChordShelf();
 renderSongList();
 $('btnSaveSong').addEventListener('click',saveSong);
 $('btnShareSong').addEventListener('click',shareCurrent);
+$('btnExportMidi').addEventListener('click',exportMidi);
+$('btnCopyNotes').addEventListener('click',copySel);
+$('btnPasteNotes').addEventListener('click',doPaste);
+$('btnDupNotes').addEventListener('click',doDuplicate);
 $('songName').addEventListener('keydown',e=>{ if(e.key==='Enter') saveSong(); });
 $('zoomYplus').addEventListener('click',()=>applyZoom('y',1));
 $('zoomYminus').addEventListener('click',()=>applyZoom('y',-1));
