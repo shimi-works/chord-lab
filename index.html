@@ -72,6 +72,14 @@
   .insp-title{font-size:11px; color:var(--txt-dim); letter-spacing:1px; margin-bottom:8px; text-transform:uppercase}
   #palette{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .drum-pat-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  #mixer{display:flex; flex-direction:column; gap:5px}
+  .mix-row{display:flex; align-items:center; gap:5px}
+  .mix-name{flex:1; font-size:12px; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mix-btn{width:24px; height:24px; border:1px solid var(--line); background:var(--panel2); color:var(--txt-dim); border-radius:5px; cursor:pointer; font-size:12px; font-weight:700; flex:none}
+  .mix-btn:hover{border-color:var(--accent)}
+  .mix-m.on{background:#b8352a; border-color:#7a1e16; color:#fff}
+  .mix-s.on{background:#c8a72a; border-color:#8a7010; color:#231a00}
+  .mix-vol{width:66px; flex:none}
   .pal-btn{
     background:linear-gradient(#3a3a42,#2b2b31); border:1px solid #1a1a1e; border-radius:5px;
     padding:6px 4px; color:var(--txt); text-align:center;
@@ -199,7 +207,17 @@
     box-shadow:0 0 6px rgba(255,255,255,.8); z-index:40; pointer-events:none; display:none}
 
   /* ---------- quiz ---------- */
-  #quizView{align-items:flex-start; justify-content:center; overflow-y:auto; background:#212126}
+  #quizView,#howtoView{align-items:flex-start; justify-content:center; overflow-y:auto; background:#212126}
+  #howtoCard{margin:26px 16px; width:min(760px,94%); background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; padding:26px 30px; box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .ht-title{font-size:26px; color:#fff; margin-bottom:8px}
+  .ht-lead{font-size:15px; line-height:1.85; color:var(--txt); margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--line)}
+  .ht-sec{margin-bottom:20px}
+  .ht-sec h3{font-size:18px; color:#8fd0ff; margin-bottom:8px}
+  .ht-sec p{font-size:14px; line-height:1.85; color:var(--txt)}
+  .ht-sec ul{margin:6px 0 0 20px}
+  .ht-sec li{font-size:14px; line-height:1.85; color:var(--txt); margin-bottom:3px}
+  .ht-sec b{color:var(--orange)}
   #quizCard{
     margin:26px 16px; width:min(640px,94%); background:var(--panel);
     border:1px solid var(--line); border-radius:10px; padding:22px 26px;
@@ -376,6 +394,7 @@
   </div>
   <div class="tabs">
     <button class="tab on" id="tabProject">🎼 プロジェクト</button>
+    <button class="tab" id="tabHowto">❓ 使い方</button>
     <button class="tab" id="tabCourse">🎓 作曲講座</button>
     <button class="tab" id="tabQuiz">🎯 コード練習</button>
   </div>
@@ -442,6 +461,11 @@
           <button class="sm-btn" data-drum="ballad">🥁 バラード</button>
         </div>
         <div class="hint-txt">クリックでドラムに丸ごと貼り付け（今の小節数ぶん）。ドラムトラックに切り替わります。</div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">🎚 ミキサー（音量・ミュート・ソロ）</div>
+        <div id="mixer"></div>
+        <div class="hint-txt"><b>M</b>＝ミュート（その楽器を消す）／<b>S</b>＝ソロ（その楽器<b>だけ</b>鳴らす。複数OK）／スライダー＝音量。再生に反映されます。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">U-FRETから読み込み</div>
@@ -524,6 +548,11 @@
         <div id="playhead"></div>
       </div>
     </div>
+  </div>
+
+  <!-- ============ how-to view ============ -->
+  <div class="view" id="howtoView">
+    <div id="howtoCard"></div>
   </div>
 
   <!-- ============ quiz view ============ -->
@@ -620,6 +649,12 @@ const S = {
   loop:{on:false,start:0,end:0}, // ループ範囲（step単位）
   prog:[],                 // [{root, q, len}] len=拍数(1〜16)
   tracks:{piano:{},guitar:{},bass:{},drums:{}}, // 楽器ごとの独立メロディ "midi:step"->長さ
+  mixer:{ // 楽器ごとの音量・ミュート・ソロ
+    piano :{mute:false,solo:false,vol:0.85},
+    guitar:{mute:false,solo:false,vol:0.75},
+    bass  :{mute:false,solo:false,vol:0.85},
+    drums :{mute:false,solo:false,vol:0.8},
+  },
   quiz:{correct:0,total:0,streak:0,best:0},
 };
 const TRACKS=['piano','guitar','bass','drums'];
@@ -762,7 +797,7 @@ function save(){
     localStorage.setItem('chordlab-v1', JSON.stringify({
       bpm:S.bpm,keyRoot:S.keyRoot,scaleType:S.scaleType,seventh:S.seventh,
       beatsPerBar:S.beatsPerBar, quantize:S.quantize, activeTrack:S.activeTrack, loop:S.loop,
-      prog:S.prog, tracks:S.tracks, quiz:S.quiz,
+      prog:S.prog, tracks:S.tracks, mixer:S.mixer, quiz:S.quiz,
     }));
   },300);
 }
@@ -815,6 +850,8 @@ function applySnapshot(d){
   else if(Array.isArray(d.melody)){ d.melody.forEach(k=>S.tracks.piano[k]=1); }
   else if(d.melody){ S.tracks.piano=d.melody; }
   if(!TRACKS.includes(S.activeTrack)) S.activeTrack='piano';
+  // ミキサー復元（無ければ既定値のまま）
+  if(d.mixer){ for(const tr of TRACKS) if(d.mixer[tr]) S.mixer[tr]={mute:!!d.mixer[tr].mute, solo:!!d.mixer[tr].solo, vol:(d.mixer[tr].vol??0.8)}; }
 }
 function load(){
   try{
@@ -832,7 +869,7 @@ function storeSongs(list){ localStorage.setItem(SONGS_KEY, JSON.stringify(list))
 function snapshot(){
   return {bpm:S.bpm,keyRoot:S.keyRoot,scaleType:S.scaleType,seventh:S.seventh,
     beatsPerBar:S.beatsPerBar,quantize:S.quantize,activeTrack:S.activeTrack,loop:S.loop,
-    prog:S.prog,tracks:S.tracks};
+    prog:S.prog,tracks:S.tracks,mixer:S.mixer};
 }
 function fmtDate(t){
   const d=new Date(t), p=n=>String(n).padStart(2,'0');
@@ -859,6 +896,7 @@ function refreshControlsFromState(){
   $('seventh').checked=S.seventh; $('beatsSel').value=S.beatsPerBar;
   $('quantSel').value=S.quantize; $('instSel').value=S.activeTrack;
   if($('trTarget')) $('trTarget').value=S.keyRoot;
+  renderMixer();
 }
 function loadSong(id){
   const s=loadSongs().find(x=>x.id===id); if(!s) return;
@@ -1321,6 +1359,26 @@ function applyDrumPattern(key){
 document.querySelectorAll('[data-drum]').forEach(btn=>{
   btn.addEventListener('click',()=>applyDrumPattern(btn.dataset.drum));
 });
+
+/* ================= ミキサー（音量・ミュート・ソロ） ================= */
+const TRACK_ICON={piano:'🎹',guitar:'🎸',bass:'🎻',drums:'🥁'};
+const TRACK_JA={piano:'ピアノ',guitar:'ギター',bass:'ベース',drums:'ドラム'};
+function renderMixer(){
+  const box=$('mixer'); if(!box) return;
+  box.innerHTML='';
+  TRACKS.forEach(tr=>{
+    const c=S.mixer[tr];
+    const row=document.createElement('div'); row.className='mix-row';
+    row.innerHTML=`<span class="mix-name">${TRACK_ICON[tr]} ${TRACK_JA[tr]}</span>`
+      +`<button class="mix-btn mix-m${c.mute?' on':''}" data-m="${tr}" title="ミュート（消す）">M</button>`
+      +`<button class="mix-btn mix-s${c.solo?' on':''}" data-s="${tr}" title="ソロ（これだけ鳴らす）">S</button>`
+      +`<input type="range" class="mix-vol" min="0" max="100" value="${Math.round(c.vol*100)}" data-v="${tr}" title="音量">`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll('[data-m]').forEach(b=>b.addEventListener('click',()=>{ S.mixer[b.dataset.m].mute=!S.mixer[b.dataset.m].mute; renderMixer(); save(); }));
+  box.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click',()=>{ S.mixer[b.dataset.s].solo=!S.mixer[b.dataset.s].solo; renderMixer(); save(); }));
+  box.querySelectorAll('[data-v]').forEach(sl=>sl.addEventListener('input',()=>{ S.mixer[sl.dataset.v].vol=(+sl.value)/100; save(); }));
+}
 $('btnDelBlock').addEventListener('click',()=>{
   if(selBlock<0)return; S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save();
 });
@@ -1454,14 +1512,18 @@ function schedule(){
       curStep=0;
     }
     const st=curStep;
+    const anySolo=TRACKS.some(t=>S.mixer[t].solo); // ソロが1つでもあれば、それ以外は鳴らさない
+    // コード伴奏はピアノ音色。ソロ中は隠す（ソロで単独に聞ける）
     const cs = chordStartList.find(c=>c.start===st);
-    if(cs) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.22));
+    if(cs && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.22*S.mixer.piano.vol,'piano'));
     if(S.metro && st%4===0) click(nextTime, st%SPB()===0);
     for(const tr of TRACKS){
+      const cfg=S.mixer[tr];
+      if(cfg.mute || (anySolo && !cfg.solo)) continue; // ミュート／非ソロはスキップ
       const mel=S.tracks[tr];
       for(const key in mel){
         const [midi,ms]=key.split(':').map(Number);
-        if(ms===st) playNote(midi,nextTime,stepDur()*mel[key]*0.95,0.42,tr);
+        if(ms===st) playNote(midi,nextTime,stepDur()*mel[key]*0.95, 0.42*cfg.vol, tr);
       }
     }
     dispQueue.push({step:st,time:nextTime});
@@ -1901,39 +1963,72 @@ function setView(v){
   curView=v;
   const proj=(v==='project'||v==='course'); // 講座もロールを使うのでプロジェクト画面を表示
   $('projectView').classList.toggle('on',proj);
+  $('howtoView').classList.toggle('on',v==='howto');
   $('quizView').classList.toggle('on',v==='quiz');
   $('tabProject').classList.toggle('on',v==='project');
+  $('tabHowto').classList.toggle('on',v==='howto');
   $('tabCourse').classList.toggle('on',v==='course');
   $('tabQuiz').classList.toggle('on',v==='quiz');
   document.body.classList.toggle('course-on', v==='course');
   clearKbdMarks(); litChord(null);
   if(v==='quiz'){ stop(); setLearnMode(learnMode); }
+  if(v==='howto'){ stop(); renderHowto(); }
   if(v==='course'){ renderCourse(); startCourseTick(); } else { stopCourseTick(); }
 }
 $('tabProject').addEventListener('click',()=>setView('project'));
+$('tabHowto').addEventListener('click',()=>setView('howto'));
 $('tabCourse').addEventListener('click',()=>setView('course'));
 $('tabQuiz').addEventListener('click',()=>setView('quiz'));
 
+/* ================= 使い方ページ ================= */
+let howtoRendered=false;
+function renderHowto(){
+  if(howtoRendered) return; howtoRendered=true;
+  $('howtoCard').innerHTML=`
+    <h2 class="ht-title">❓ このアプリの使い方</h2>
+    <p class="ht-lead">「Chord Lab」は、コードやメロディを打ち込んで曲を作れるアプリです。ここでは各部の使い方をまとめています。はじめての人はここを読んでから、上の「🎓 作曲講座」で実際に作ってみるのがおすすめです。</p>
+    <div class="ht-sec"><h3>🖥 画面のつくり</h3>
+      <p>中央の大きな編集エリアが<b>ピアノロール</b>。上から順に：</p>
+      <ul>
+        <li><b>コードレーン</b>（青い帯）… 曲のコード進行を並べる場所</li>
+        <li><b>4つのトラック</b>… 🎹ピアノ / 🎸ギター / 🎻ベース / 🥁ドラム。楽器ごとに音を置きます（各レーンの左に楽器名）</li>
+        <li>いちばん下の<b>鍵盤</b>… クリックで音が鳴る（PCキーでも演奏可）</li>
+      </ul></div>
+    <div class="ht-sec"><h3>▶ 再生・停止</h3>
+      <p>上のバーの <b>▶</b>（またはキーボードの <b>Space</b>）で再生／停止。<b>⏮</b>で先頭に戻る、<b>🔁</b>でループ、<b>⏺</b>は録音（弾いた音をその場で記録）。</p></div>
+    <div class="ht-sec"><h3>✏️ 音の置き方（いちばん大事）</h3>
+      <ul>
+        <li><b>Altキーを押しながらクリック</b>… その場所に音符を置く</li>
+        <li>置いた音を<b>クリック</b>＝選択（<b>Shift+クリック</b>で複数選択、空きを<b>ドラッグ</b>で範囲選択）</li>
+        <li><b>ドラッグ</b>＝移動 ／ 音の<b>右端をドラッグ</b>＝長さ変更 ／ <b>Delete</b>＝削除</li>
+        <li><b>Ctrl+Z</b> で一手戻す（↶ボタンでも。32手ぶん戻せます）</li>
+      </ul></div>
+    <div class="ht-sec"><h3>🎛 トラックの切り替え</h3>
+      <p>上の「<b>トラック</b>」で楽器を選ぶか、ロールの<b>各レーンをクリック</b>すると、その楽器が編集対象になります（他は薄く表示）。</p></div>
+    <div class="ht-sec"><h3>🎚 ミキサー（音量・ミュート・ソロ）</h3>
+      <p>左パネルの「ミキサー」で楽器ごとに調整できます。</p>
+      <ul>
+        <li><b>M（ミュート）</b>… その楽器の音を<b>消す</b>（もう一度で戻る）</li>
+        <li><b>S（ソロ）</b>… その楽器<b>だけ</b>鳴らす。複数ONにするとその楽器たちだけ鳴ります。「ドラムだけ聞きたい」ときに便利</li>
+        <li><b>スライダー</b>… 音量。バランスを整えられます</li>
+      </ul></div>
+    <div class="ht-sec"><h3>🎵 コード・ドラムを手早く置く</h3>
+      <p>左パネルの<b>パレット</b>をコードレーンへドラッグでコードを追加（「プリセット進行」で王道進行なども一発）。<b>ドラムパターン</b>のボタンで、8ビートなどを丸ごと貼り付けられます。</p></div>
+    <div class="ht-sec"><h3>🔍 見やすさ・保存・共有</h3>
+      <ul>
+        <li>上の「<b>拡大縮小</b>」でロールを縦横に伸縮（縦−で全体が見やすく）</li>
+        <li>横スクロールは スクロールバー／Shift+ホイール／マウス中ボタンドラッグ</li>
+        <li>左の「<b>マイソング</b>」で曲を<b>保存・一覧・読み込み</b>。<b>🔗共有リンク</b>でURLを送れば相手も同じ曲を開けます</li>
+      </ul></div>
+    <div class="ht-sec"><h3>🎓 つぎは</h3>
+      <p>「<b>🎯 コード練習</b>」でコードの仕組みを学べます（鍵盤の図つき）。実際に曲を作るなら「<b>🎓 作曲講座</b>」を最初から進めてみましょう！</p></div>`;
+}
+
 /* ================= 作曲講座（ガイド付き・条件クリアで次へ） ================= */
 const COURSE=[
-  { title:'はじめに ― このアプリの使い方', track:null,
-    body:`<p>ようこそ！ここは、<b>コードやメロディを打ち込んで曲を作る</b>ためのアプリです。まずは画面の見方だけ、かんたんに覚えましょう。</p>
-      <h4>🖥 画面のつくり</h4>
-      <p>この講座では、右側に<b>ピアノロール</b>という編集エリアが出ています。上から順に：<br>
-      ・<b>コードレーン</b>（青い帯）＝曲のコード進行を並べる場所<br>
-      ・<b>4つのトラック</b>＝🎹ピアノ / 🎸ギター / 🎸ベース / 🥁ドラム。楽器ごとに音を置きます<br>
-      ・いちばん下の<b>鍵盤</b>＝クリックすると音が鳴ります（PCのキーでも弾けます）</p>
-      <h4>▶ 再生のしかた</h4>
-      <p>上のバーの <b>▶</b> ボタン（またはキーボードの <b>Space</b>）で再生・停止。<b>⏮</b>で先頭に戻ります。</p>
-      <h4>✏️ 音の置き方（超重要）</h4>
-      <p>ロールの上で <b>Altキーを押しながらクリック</b> すると、そこに音符（ノート）が置けます。<br>
-      ・置いた音を<b>クリック</b>＝選択　／　<b>ドラッグ</b>＝移動　／　<b>右端をドラッグ</b>＝長さ変更<br>
-      ・<b>Deleteキー</b>で選択した音を削除　／　<b>Ctrl+Z</b>で一手戻せます（安心して試してOK）</p>
-      <div class="cg-note">🔰 まずは気軽に。まちがえても Ctrl+Z で戻せます。準備ができたら「次へ」で作曲スタート！</div>`,
-    task:'画面の見方を確認したら「次へ」を押そう', check:()=>true },
-
   { title:'STEP 1 ― コードって何？置いてみよう', track:null,
-    body:`<h4>🎹 コードとは</h4>
+    body:`<p style="color:var(--txt-dim);font-size:13px;margin-bottom:10px">💡 操作に不安があれば、上のタブ「❓ 使い方」を先に読んでね。ここでは実際に曲を作っていきます。</p>
+      <h4>🎹 コードとは</h4>
       <p><b>コードは、2つ以上の音を同時に鳴らした“響き”</b>のこと。たとえば「ド・ミ・ソ」を一緒に鳴らすと <b>C（シー）</b> という明るいコードになります。曲の<b>土台・伴奏</b>になる部分です。</p>
       <p><button class="exp-play" data-play="0:">🔊 ド・ミ・ソ（C）を聞く</button></p>
       <h4>😊 明るい / 😢 暗い</h4>
@@ -2004,8 +2099,7 @@ function courseCheck(){
   nx.textContent = last ? '完成する 🎉' : '次へ ▶';
   if(done){
     st.className='cp-status ok';
-    st.textContent = courseStep===0 ? '✅ OK！「次へ」で始めよう'
-      : last ? '✅ 条件クリア！「完成する」で仕上げ' : '✅ できた！「次へ」を押そう';
+    st.textContent = last ? '✅ 条件クリア！「完成する」で仕上げ' : '✅ できた！「次へ」を押そう';
   }else{
     st.className='cp-status wait';
     st.textContent='⏳ 目標を達成すると「次へ」が押せます';
@@ -2145,6 +2239,7 @@ renderTimeline();
 updateLoopBtn();
 renderStats();
 renderExplain();
+renderMixer();
 renderSongList();
 $('btnSaveSong').addEventListener('click',saveSong);
 $('btnShareSong').addEventListener('click',shareCurrent);
