@@ -606,6 +606,8 @@
   <div id="kbdHelp">PCキーで演奏： Z S X D C V G B H N J M = ド〜シ(低) ／ Q 2 W 3 E R 5 T 6 Y 7 U = ド〜シ(中) ／ I 9 O 0 P = ド〜ミ(高)</div>
 </div>
 
+<!-- 高音質サンプル音源（GMサウンドフォント）。読めない場合は内蔵合成音にフォールバック -->
+<script async src="https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
 <script>
 'use strict';
 /* ================= 基礎データ ================= */
@@ -695,19 +697,41 @@ function initAudio(){
   comp.threshold.value=-18; comp.ratio.value=6;
   master = AC.createGain(); master.gain.value=0.6;
   master.connect(comp); comp.connect(AC.destination);
+  loadSoundfonts(); // 高音質サンプルの読み込み開始（非同期・失敗しても合成音で鳴る）
 }
-// 楽器ごとの合成パラメータ（音質は簡易・外部音源なし）
+// 楽器ごとの合成パラメータ（サンプルが読めない時のフォールバック）
 const INST={
   piano :{o1:'triangle',o2:'sawtooth',o2g:0.25,det:4,lp:3200,oct:0,  rel:0.18,sus:0.55},
   guitar:{o1:'sawtooth',o2:'square',  o2g:0.15,det:6,lp:2600,oct:0,  rel:0.12,sus:0.40},
   bass  :{o1:'sine',    o2:'triangle',o2g:0.35,det:2,lp:900, oct:-12,rel:0.14,sus:0.72},
 };
+/* ===== 高音質サンプル（soundfont-player / GM音源）===== */
+let SF={}, sfLoaded=false;
+const SF_MAP={piano:'acoustic_grand_piano', guitar:'acoustic_guitar_steel', bass:'electric_bass_finger'};
+function loadSoundfonts(retries){
+  retries=retries||0;
+  if(sfLoaded || !AC) return;
+  if(!window.Soundfont){ if(retries<20) setTimeout(()=>loadSoundfonts(retries+1),500); return; }
+  sfLoaded=true;
+  for(const tr in SF_MAP){
+    try{
+      Soundfont.instrument(AC, SF_MAP[tr], {destination:master})
+        .then(inst=>{ SF[tr]=inst; })
+        .catch(()=>{}); // 失敗時はそのトラックだけ合成音のまま
+    }catch(e){}
+  }
+}
 function playNote(midi, when, dur, vel=0.4, inst){
   if(!AC) return;
   if(AC.state==='suspended') AC.resume(); // モバイル等でサスペンドしたまま鳴らない対策
   inst = inst || S.activeTrack;
   const t = Math.max(when, AC.currentTime);
   if(inst==='drums'){ playDrum(midi,t,vel); return; }
+  // サンプル音源があればそれで鳴らす（無ければ下の合成音）
+  if(SF[inst]){
+    const oct=(INST[inst]&&INST[inst].oct)||0;
+    try{ SF[inst].play(midi+oct, t, {duration:dur, gain:Math.min(1.4, vel*3.2)}); return; }catch(e){}
+  }
   const p = INST[inst] || INST.piano;
   const f = 440*Math.pow(2,(midi+p.oct-69)/12);
   const g = AC.createGain();
