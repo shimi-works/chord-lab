@@ -295,6 +295,10 @@
 <div id="toolbar">
   <div class="logo">Chord<span>Lab</span></div>
   <div class="tb-group">
+    <button class="tb-btn" id="btnUndo" title="一手前に戻す (Ctrl+Z)" disabled>↶</button>
+    <button class="tb-btn" id="btnRedo" title="やり直す (Ctrl+Y)" disabled>↷</button>
+  </div>
+  <div class="tb-group">
     <button class="tb-btn" id="btnTop" title="先頭に戻る">⏮</button>
     <button class="tb-btn" id="btnStop" title="停止 (先頭へ)">■</button>
     <button class="tb-btn" id="btnPlay" title="再生/一時停止 (Space)">▶</button>
@@ -705,6 +709,7 @@ const loopSteps = ()=> contentSteps() || SPB();
 
 let saveTimer=null;
 function save(){
+  commitHistory();            // アンドゥ用の履歴を記録（変化があった時だけ）
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
     localStorage.setItem('chordlab-v1', JSON.stringify({
@@ -713,6 +718,42 @@ function save(){
       prog:S.prog, tracks:S.tracks, quiz:S.quiz,
     }));
   },300);
+}
+/* ================= アンドゥ / リドゥ（最大32手） ================= */
+const HISTORY_MAX=32;
+let undoStack=[], redoStack=[], prevSnap=null;
+function commitHistory(){
+  const cur=JSON.stringify(snapshot());
+  if(prevSnap!==null && prevSnap!==cur){
+    undoStack.push(prevSnap);
+    if(undoStack.length>HISTORY_MAX) undoStack.shift();
+    redoStack.length=0; // 新しい操作でリドゥは無効化
+  }
+  prevSnap=cur;
+  updateUndoBtn();
+}
+function applyHistoryState(json){
+  applySnapshot(JSON.parse(json));
+  prevSnap=json;              // これを基準にするので commitHistory は再pushしない
+  selNotes.clear(); selBlock=-1; palAssist=null; curBars=-1; curSPB=-1;
+  refreshControlsFromState(); applyBeats();
+  renderPalette(); renderTimeline(); updateLoopBtn(); save();
+  updateUndoBtn();
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(JSON.stringify(snapshot()));
+  applyHistoryState(undoStack.pop());
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(JSON.stringify(snapshot()));
+  applyHistoryState(redoStack.pop());
+}
+function updateUndoBtn(){
+  const u=$('btnUndo'), r=$('btnRedo');
+  if(u) u.disabled=!undoStack.length;
+  if(r) r.disabled=!redoStack.length;
 }
 /* スナップショット(d)を現在の状態Sに適用（曲の読み込みでも使う） */
 function applySnapshot(d){
@@ -1556,6 +1597,9 @@ function litChord(pcs){
 window.addEventListener('keydown',ev=>{
   if(ev.repeat) return;
   const tag=document.activeElement?.tagName;
+  // Ctrl+Z / Ctrl+Y（入力欄にいる時以外）
+  if((ev.ctrlKey||ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase()==='z' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); undo(); return; }
+  if((ev.ctrlKey||ev.metaKey) && (ev.key.toLowerCase()==='y' || (ev.shiftKey && ev.key.toLowerCase()==='z')) && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); redo(); return; }
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
   if(ev.code==='Space'){ ev.preventDefault(); if(curView==='project') play(); return; }
   if(ev.key==='Enter' && quizActive() && qMode==='press'){ judge(); return; }
@@ -1990,6 +2034,9 @@ $('zoomYplus').addEventListener('click',()=>applyZoom('y',1));
 $('zoomYminus').addEventListener('click',()=>applyZoom('y',-1));
 $('zoomXplus').addEventListener('click',()=>applyZoom('x',1));
 $('zoomXminus').addEventListener('click',()=>applyZoom('x',-1));
+$('btnUndo').addEventListener('click',undo);
+$('btnRedo').addEventListener('click',redo);
+prevSnap=JSON.stringify(snapshot()); updateUndoBtn(); // 履歴の基準を初期化
 document.addEventListener('pointerdown',()=>initAudio(),{once:true});
 </script>
 </body>
