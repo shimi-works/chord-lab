@@ -930,7 +930,9 @@ function findNoteAt(midi, step){
 /* ノートの矩形（rollBody基準px） */
 function noteRect(key){
   const [m,s]=key.split(':').map(Number);
-  return {x:KEYW+s*CW, y:(TOP_MIDI-m)*ROWH, w:CM()[key]*CW, h:ROWH};
+  const laneIndex=TRACKS.indexOf(S.activeTrack); // アクティブレーン内の絶対y
+  const y=laneIndex*LANE_H+HEADER_H+(TOP_MIDI-m)*ROWH;
+  return {x:KEYW+s*CW, y, w:CM()[key]*CW, h:ROWH};
 }
 function grab(ev){ try{ $('rollBody').setPointerCapture(ev.pointerId); }catch(e){} }
 /* ドラッグがビュー端に来たら横スクロール */
