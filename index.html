@@ -123,6 +123,7 @@
   }
   .row-key.white{background:#e8e8ec; color:#555}
   .row-key.black{background:#2a2a30; color:#777}
+  .row-key.drumkey{background:#33272a; color:#ff9a9a; font-size:8px; justify-content:center; padding-right:0}
   .row-key.kdown{filter:brightness(.8)}
   .row-cells{position:relative; flex:1; border-bottom:1px solid rgba(0,0,0,.2);
     background-image:
@@ -448,6 +449,10 @@ const DIA = {
 };
 const PRESETS = {oudou:[3,4,2,5], canon:[0,4,5,2,3,0,3,4], komuro:[5,3,4,0], '251':[1,4,0,0]};
 const CW = 22, ROWH = 18, KEYW = 48, TOP_MIDI = 84, BOT_MIDI = 60; // ロール: C4〜C6
+const ROWS = TOP_MIDI - BOT_MIDI + 1;   // 1トラックの行数(25)
+const HEADER_H = 20;                     // トラック見出しの高さ
+const LANE_H = HEADER_H + ROWS*ROWH;     // 1トラックのレーン全高
+const TRACK_LABEL = {piano:'🎹 ピアノ', guitar:'🎸 ギター', bass:'🎸 ベース', drums:'🥁 ドラム'};
 const KBD_LO = 48, KBD_HI = 83; // 鍵盤: C3〜B5
 const KEYMAP = {z:48,s:49,x:50,d:51,c:52,v:53,g:54,b:55,h:56,n:57,j:58,m:59,
   q:60,'2':61,w:62,'3':63,e:64,r:65,'5':66,t:67,'6':68,y:69,'7':70,u:71,
@@ -635,10 +640,14 @@ function buildRoll(){
     for(let midi=TOP_MIDI; midi>=BOT_MIDI; midi--){
       const row=document.createElement('div');
       const pc=((midi%12)+12)%12, black=BLACK_PC.has(pc);
-      row.className='roll-row'+(black?' blackrow':'')+(pc===0?' crow':'');
+      const isDrum=tr==='drums';
+      row.className='roll-row'+(black&&!isDrum?' blackrow':'')+(pc===0&&!isDrum?' crow':'');
       const key=document.createElement('div');
-      key.className='row-key '+(black?'black':'white');
-      key.textContent = pc===0 ? 'C'+(Math.floor(midi/12)-1) : (black?'':PC[pc]);
+      key.className='row-key '+(isDrum?'drumkey':(black?'black':'white'));
+      // ドラムは音程が無いので、行ごとにどの打楽器かを表示（キック/スネア/ハット）
+      key.textContent = isDrum
+        ? (midi<=67?'キック':midi<=75?'スネア':'ハット')
+        : (pc===0 ? 'C'+(Math.floor(midi/12)-1) : (black?'':PC[pc]));
       const cells=document.createElement('div');
       cells.className='row-cells'; cells.dataset.midi=midi; cells.dataset.track=tr;
       const mm=midi, tt=tr;
@@ -1564,7 +1573,6 @@ $('btnTrTo').addEventListener('click',()=>{
 /* 既存メロディを現在のクオンタイズ幅に整列 */
 function applyQuantize(){
   const q=S.quantize; if(q<=1) return;
-  const nm={};
   const mel=CM(), nm={};
   for(const k in mel){
     const [m,s]=k.split(':').map(Number);
