@@ -441,11 +441,11 @@
     <button class="tb-btn" id="btnRedo" title="やり直す (Ctrl+Y)" disabled>↷</button>
   </div>
   <div class="tb-group">
-    <button class="tb-btn" id="btnTop" title="先頭に戻る">⏮</button>
+    <button class="tb-btn" id="btnTop" title="先頭に戻る（テンキー . / Home）">⏮</button>
     <button class="tb-btn" id="btnStop" title="停止 (先頭へ)">■</button>
-    <button class="tb-btn" id="btnPlay" title="再生/一時停止 (Space)">▶</button>
-    <button class="tb-btn" id="btnRec" title="録音：ONにして弾くと、再生位置にノートが記録されます">⏺</button>
-    <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーをドラッグで範囲指定）">🔁</button>
+    <button class="tb-btn" id="btnPlay" title="再生/一時停止 (Space、テンキーEnterで再生)">▶</button>
+    <button class="tb-btn" id="btnRec" title="録音：ONにして弾くと、再生位置にノートが記録されます（テンキー ＊）">⏺</button>
+    <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーをドラッグで範囲指定／テンキー ／）">🔁</button>
     <div id="pos">1.1</div>
   </div>
   <div class="tb-group">
@@ -1308,6 +1308,13 @@ function pasteAt(anchorStep){
 }
 function doPaste(){ if(pasteAt(pasteCursor)) pasteCursor+=clip.w; }
 function doDuplicate(){ if(copySel()) doPaste(); } // 選択→すぐ右へ。連打で繰り返しが伸びる
+function cutSel(){ if(copySel()){ const mel=CM(); for(const k of selNotes) delete mel[k]; selNotes.clear(); renderTimeline(); save(); } } // Ctrl+X
+function selectAllNotes(){ // Ctrl+A：アクティブトラックの全ノートを選択
+  selNotes=new Set(Object.keys(CM()));
+  const st=$('clipStatus'); if(st) st.textContent=selNotes.size+'個のノートを全選択しました';
+  renderTimeline();
+}
+function toggleRecord(){ $('btnRec').click(); } // テンキー* 用
 
 /* ===== MIDI書き出し（Standard MIDI File / format 1） ===== */
 function downloadBlob(blob, name){
@@ -2262,14 +2269,24 @@ window.addEventListener('keydown',ev=>{
   // Ctrl+Z / Ctrl+Y（入力欄にいる時以外）
   if((ev.ctrlKey||ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase()==='z' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); undo(); return; }
   if((ev.ctrlKey||ev.metaKey) && (ev.key.toLowerCase()==='y' || (ev.shiftKey && ev.key.toLowerCase()==='z')) && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); redo(); return; }
-  // ノートのコピー/貼り付け/複製（入力欄以外・ロール画面＝プロジェクト/講座）
+  // 保存（Cubase: Ctrl+S）— 画面を問わず有効。ブラウザの保存ダイアログは抑制
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='s' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); saveSong(); return; }
+  // ノートのコピー/切り取り/貼り付け/複製/全選択（Cubase準拠・ロール画面＝プロジェクト/講座）
   if((ev.ctrlKey||ev.metaKey) && onRoll && tag!=='INPUT' && tag!=='TEXTAREA'){
     const kk=ev.key.toLowerCase();
     if(kk==='c'){ ev.preventDefault(); copySel(); return; }
+    if(kk==='x'){ ev.preventDefault(); cutSel(); return; }
     if(kk==='v'){ ev.preventDefault(); doPaste(); return; }
     if(kk==='d'){ ev.preventDefault(); doDuplicate(); return; }
+    if(kk==='a'){ ev.preventDefault(); selectAllNotes(); return; }
   }
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
+  // ===== Cubase準拠トランスポート（テンキー中心） =====
+  if(ev.code==='NumpadDecimal'){ ev.preventDefault(); if(onRoll) toStart(); return; }        // テンキー. → 再生ラインを先頭へ
+  if(ev.code==='NumpadEnter'){ ev.preventDefault(); if(onRoll && !playing) play(); return; }  // テンキーEnter → 再生
+  if(ev.code==='NumpadMultiply'){ ev.preventDefault(); if(onRoll) toggleRecord(); return; }   // テンキー* → 録音
+  if(ev.code==='NumpadDivide'){ ev.preventDefault(); if(onRoll) $('btnLoop').click(); return; } // テンキー/ → ループ(サイクル)
+  if(ev.key==='Home'){ if(onRoll){ ev.preventDefault(); toStart(); } return; }                // Home → 先頭へ
   if(ev.code==='Space'){ ev.preventDefault(); if(onRoll) play(); return; }
   if(ev.key==='Enter' && quizActive() && qMode==='press'){ judge(); return; }
   if(ev.key==='Escape' && onRoll){
@@ -2614,6 +2631,18 @@ function renderHowto(){
         <li><b>やらかした</b>… <b>Ctrl+Z</b>で戻せます（32手）</li>
       </ul></div>
 
+    <div class="ht-sec ht-key"><h3>⌨ ショートカットキー（Cubase準拠）</h3>
+      <p>DAW（Cubase）に近い操作で使えます。テンキー（数字キーパッド）中心のトランスポート：</p>
+      <ul>
+        <li><b>テンキー .（ドット）</b>… 再生ラインを<b>先頭へ戻す</b>（Homeキーでも同じ）</li>
+        <li><b>Space</b>… 再生／停止（トグル）　<b>テンキー Enter</b>… 再生開始</li>
+        <li><b>テンキー ＊</b>… 録音のON/OFF　<b>テンキー ／</b>… ループ（サイクル）のON/OFF</li>
+        <li><b>Ctrl+Z / Ctrl+Y</b>… 元に戻す／やり直し</li>
+        <li><b>Ctrl+C / Ctrl+X / Ctrl+V</b>… コピー／切り取り／貼り付け　<b>Ctrl+D</b>… 複製（右へ）</li>
+        <li><b>Ctrl+A</b>… （編集中トラックの）全ノート選択　<b>Delete</b>… 選択を削除</li>
+        <li><b>Ctrl+S</b>… マイソングに保存</li>
+      </ul>
+      <p style="font-size:12px;color:var(--txt-dim)">※数字・アルファベットの単キーは<b>鍵盤演奏</b>に使うため、ツール切替（ハサミ等）はツールバーのボタンで行います。</p></div>
     <div class="ht-sec"><h3>🎓 つぎは</h3>
       <p>「<b>🎯 コード練習</b>」でコードの仕組みを鍵盤の図つきで学べます。実際に曲を作るなら「<b>🎓 作曲講座</b>」を最初から進めてみましょう！</p></div>`;
 }
