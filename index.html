@@ -219,6 +219,22 @@
     border-radius:20px; padding:7px 14px; font-size:13px; cursor:pointer}
   .exp-play:hover{filter:brightness(1.12)}
   .exp-play:active{transform:translateY(1px)}
+  /* ミニ鍵盤（コード解説の図） */
+  .cc-row{display:flex; flex-wrap:wrap; gap:16px; margin-top:14px}
+  .chord-card{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 12px 10px; text-align:center}
+  .mk{position:relative; width:210px; height:80px; margin:0 auto; cursor:pointer; user-select:none}
+  .mk-w{position:absolute; top:0; width:30px; height:80px; box-sizing:border-box;
+    background:linear-gradient(#fdfdfd,#e9e9ee 85%,#dcdce2); border:1px solid #8a8a90; border-radius:0 0 4px 4px;
+    z-index:1; display:flex; align-items:flex-end; justify-content:center; padding-bottom:5px; font-size:11px; color:#888; font-weight:700}
+  .mk-w.hl{background:linear-gradient(#ffe08a,#ffb43a); border-color:#c8892a; color:#5c3a00}
+  .mk-b{position:absolute; top:0; width:18px; height:50px; box-sizing:border-box;
+    background:linear-gradient(#3a3a40,#141417); border:1px solid #000; border-radius:0 0 3px 3px;
+    z-index:2; display:flex; align-items:flex-end; justify-content:center; padding-bottom:3px; font-size:9px}
+  .mk-b.hl{background:linear-gradient(#ffb45a,#e8781a); border-color:#a8500e}
+  .mk-b span{color:#3a1e00; font-weight:700}
+  .mk:hover .mk-w:not(.hl){background:linear-gradient(#fff,#eee)}
+  .cc-cap{margin-top:9px; font-size:13px; color:var(--txt); line-height:1.5}
+  .cc-cap b{color:#ffd479; font-size:15px}
   #qText{font-size:26px; font-weight:700; color:#fff; margin:14px 0 4px; min-height:38px}
   #qText b{color:var(--orange); font-size:34px}
   #qSub{color:var(--txt-dim); font-size:12px; min-height:18px}
@@ -1770,61 +1786,62 @@ $('qLevel').addEventListener('change',newQuestion);
 
 /* ================= コード解説 ================= */
 // [🔊 ...] のボタンは data-play="root:q,root:q,..." を順に鳴らす
-const EXPLAIN_HTML = `
-<div class="exp-sec">
-  <h3>🎹 コードって何？</h3>
-  <p>コードとは、<b>2つ以上の音を同時に鳴らしたもの</b>のこと。たとえば「ド・ミ・ソ」を一緒に鳴らすと、明るい「C（シー）」というコードになります。曲の“土台”になる響きです。</p>
-  <div class="exp-btns"><button class="exp-play" data-play="0:">🔊 ド・ミ・ソ（C）を聞く</button></div>
-</div>
-<div class="exp-sec">
-  <h3>😊 メジャー と 😢 マイナー のちがい</h3>
-  <p>いちばん大事な2種類。<b>メジャー＝明るい</b>、<b>マイナー＝暗い・切ない</b>。ちがいは真ん中の音が<b>半音下がるだけ</b>。ド・ミ・ソ→ド・<b>ミ♭</b>・ソ にするとマイナーになります。聞き比べてみて！</p>
-  <div class="exp-btns">
-    <button class="exp-play" data-play="0:">🔊 C（明るい）</button>
-    <button class="exp-play" data-play="0:m">🔊 Cm（暗い）</button>
-  </div>
-</div>
-<div class="exp-sec">
-  <h3>✨ 7th（セブンス）って？</h3>
-  <p>コードに<b>4つ目の音を足した</b>もの。ちょっと<b>大人っぽく・おしゃれ</b>な響きになります。ジャズやおしゃれな曲でよく使います。C→C7→CM7 と足していくと雰囲気が変わるのが分かります。</p>
-  <div class="exp-btns">
-    <button class="exp-play" data-play="0:">🔊 C</button>
-    <button class="exp-play" data-play="0:7">🔊 C7</button>
-    <button class="exp-play" data-play="0:maj7">🔊 CM7</button>
-  </div>
-</div>
-<div class="exp-sec">
-  <h3>🌫️ sus4（サスフォー）って？</h3>
-  <p>真ん中の音を<b>ちょっと上げた</b>コード。<b>宙に浮いたような、次に進みたくなる</b>響きです。sus4 → ふつうのコード、と続けると“解決”した気持ちよさがあります。</p>
-  <div class="exp-btns">
-    <button class="exp-play" data-play="0:sus4">🔊 Csus4</button>
-    <button class="exp-play" data-play="0:sus4,0:">🔊 Csus4 → C（解決）</button>
-  </div>
-</div>
-<div class="exp-sec">
-  <h3>😵 dim / aug（ちょっと不安な音）</h3>
-  <p><b>dim（ディミニッシュ）</b>と<b>aug（オーギュメント）</b>は、<b>不安定でハラハラする</b>響き。使いすぎず“味付け”に。</p>
-  <div class="exp-btns">
-    <button class="exp-play" data-play="0:dim">🔊 Cdim</button>
-    <button class="exp-play" data-play="0:aug">🔊 Caug</button>
-  </div>
-</div>
-<div class="exp-sec">
-  <h3>🎼 つぎのステップ</h3>
-  <p>コードが分かったら、上の「🎯 クイズに挑戦」で練習！ さらに、上部タブの「🎓 作曲講座」で、コード→ベース→ドラム→メロディ→ギターと順番に曲を作れます。</p>
-</div>`;
+// ドレミ表記（PC順：ド ド♯ レ ミ♭ ミ ファ ファ♯ ソ ソ♯ ラ シ♭ シ）
+const DOREMI=['ド','ド♯','レ','ミ♭','ミ','ファ','ファ♯','ソ','ソ♯','ラ','シ♭','シ'];
+/* コード(root,q)の構成音を光らせたミニ鍵盤HTML（クリックで鳴る） */
+function miniKb(root,q){
+  const hl=new Set(CHORD[q].iv.map(iv=>(root+iv)%12));
+  const WW=30, BW=18, whites=[0,2,4,5,7,9,11];
+  let h='<div class="mk" data-play="'+root+':'+q+'" title="クリックで鳴らす🔊">';
+  whites.forEach((pc,i)=>{
+    const on=hl.has(pc);
+    h+='<div class="mk-w'+(on?' hl':'')+'" style="left:'+(i*WW)+'px">'+(on?'<span>'+DOREMI[pc]+'</span>':'')+'</div>';
+  });
+  const blackLeft={1:1,3:2,6:4,8:5,10:6};
+  for(const pc in blackLeft){ const on=hl.has(+pc);
+    h+='<div class="mk-b'+(on?' hl':'')+'" style="left:'+(blackLeft[pc]*WW-BW/2)+'px">'+(on?'<span>'+DOREMI[+pc]+'</span>':'')+'</div>';
+  }
+  return h+'</div>';
+}
+/* 鍵盤＋キャプション（コード名＝ドレミ）のカード */
+function chordCard(root,q,name){
+  const notes=CHORD[q].iv.map(iv=>DOREMI[(root+iv)%12]).join('・');
+  return '<div class="chord-card">'+miniKb(root,q)+'<div class="cc-cap"><b>'+name+'</b>　'+notes+'</div></div>';
+}
 function renderExplain(){
   const box=$('explainBox'); if(!box) return;
-  box.innerHTML=EXPLAIN_HTML;
-  box.querySelectorAll('.exp-play').forEach(btn=>{
-    btn.addEventListener('click',async ()=>{
-      const seq=btn.dataset.play.split(',');
-      for(let i=0;i<seq.length;i++){
-        const [root,q]=seq[i].split(':');
-        playChordNow(+root, q||'', 0.9);
-        if(i<seq.length-1) await new Promise(r=>setTimeout(r,750));
-      }
-    });
+  box.innerHTML=`
+    <div class="exp-sec">
+      <h3>🎹 コードって何？</h3>
+      <p>コードとは <b>2つ以上の音を同時に鳴らしたもの</b>。「ド・ミ・ソ」を一緒に鳴らすと明るい <b>C</b> になります。曲の“土台”です。下の鍵盤の<b>光っているところ</b>が使う音。<b>鍵盤をクリックすると鳴ります🔊</b></p>
+      <div class="cc-row">${chordCard(0,'','C（メジャー）')}</div>
+    </div>
+    <div class="exp-sec">
+      <h3>😊 メジャー と 😢 マイナー</h3>
+      <p>ちがいは <b>真ん中の音（ミ）が半音下がる</b> だけ。鍵盤で見ると一目瞭然！ 2つをクリックして聞き比べてみて。</p>
+      <div class="cc-row">${chordCard(0,'','C（明るい）')}${chordCard(0,'m','Cm（暗い）')}</div>
+    </div>
+    <div class="exp-sec">
+      <h3>✨ 7th（セブンス）</h3>
+      <p>コードに <b>4つ目の音を足す</b> とおしゃれで大人っぽい響きに。光る鍵盤が1つ増えるのが分かります。</p>
+      <div class="cc-row">${chordCard(0,'','C')}${chordCard(0,'7','C7')}${chordCard(0,'maj7','CM7')}</div>
+    </div>
+    <div class="exp-sec">
+      <h3>🌫️ sus4（サスフォー）</h3>
+      <p>真ん中の音を <b>ミ→ファ に上げた</b> コード。宙に浮いたような響きで、<b>sus4→C</b> と続けると“解決”します。左をクリック→右をクリックで体感！</p>
+      <div class="cc-row">${chordCard(0,'sus4','Csus4')}${chordCard(0,'','C（解決先）')}</div>
+    </div>
+    <div class="exp-sec">
+      <h3>😵 dim / aug（ちょっと不安な音）</h3>
+      <p>どちらも <b>不安定でハラハラする</b> 響き。使いすぎず“味付け”に。光る音の間隔が独特です。</p>
+      <div class="cc-row">${chordCard(0,'dim','Cdim')}${chordCard(0,'aug','Caug')}</div>
+    </div>
+    <div class="exp-sec">
+      <h3>🎼 つぎのステップ</h3>
+      <p>コードが分かったら、上の「🎯 クイズに挑戦」で練習！ さらに、上部タブの「🎓 作曲講座」で、コード→ベース→ドラム→メロディ→ギターと順番に曲を作れます。</p>
+    </div>`;
+  box.querySelectorAll('.mk').forEach(mk=>{
+    mk.addEventListener('click',()=>{ const [r,q]=mk.dataset.play.split(':'); playChordNow(+r,q||'',1.0); });
   });
 }
 let learnMode='explain';
