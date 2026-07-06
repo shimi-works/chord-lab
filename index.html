@@ -127,6 +127,21 @@
   .sug-chip .sc-nm{display:block; font-size:13px; font-weight:600}
   .sug-chip.rep{border-color:#3a6b52} .sug-chip.rep:hover{border-color:#4a9e6b}
   .sug-chip.next{border-color:#6b5a3a} .sug-chip.next:hover{border-color:#c8963a}
+  /* 楽曲アナライザー */
+  .analyzer-out{margin-top:8px; font-size:12.5px; line-height:1.7}
+  .analyzer-out:empty{display:none}
+  .az-block{background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:8px}
+  .az-h{font-size:12px; font-weight:700; color:#8fd0ff; margin-bottom:5px}
+  .az-name{font-size:14px; font-weight:700; color:#ffd479}
+  .az-romans{display:flex; flex-wrap:wrap; gap:4px; margin:5px 0}
+  .az-rom{background:#2b2b31; border:1px solid #1a1a1e; border-radius:4px; padding:2px 6px; font-size:12px}
+  .az-rom.out{color:#e0864a; border-color:#5a3a1e}
+  .az-meter{margin:5px 0}
+  .az-meter .az-lab{display:flex; justify-content:space-between; font-size:11px; color:var(--txt-dim)}
+  .az-bar{height:7px; background:#1a1a1e; border-radius:4px; overflow:hidden; margin-top:2px}
+  .az-bar>span{display:block; height:100%; border-radius:4px}
+  .az-note{font-size:12px; color:var(--txt); margin-top:4px}
+  .az-good{color:#6fd39a} .az-mid{color:#e6c56a} .az-bad{color:#e0864a}
 
   /* ---------- timeline ---------- */
   #tlScroll{flex:1; min-width:0; overflow:auto; background:#212126; position:relative}
@@ -370,12 +385,57 @@
   .cp-nav button:hover:not(:disabled){border-color:var(--accent)}
   .cp-nav button.primary{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a; color:#fff; font-weight:700}
   .cp-nav button:disabled{opacity:.4; cursor:not-allowed}
+  /* ようこそオーバーレイ（初回導線） */
+  #welcome{position:fixed; inset:0; z-index:200; display:none; align-items:center; justify-content:center;
+    background:rgba(8,9,12,.82); backdrop-filter:blur(3px); padding:20px}
+  #welcome.on{display:flex}
+  .wl-card{width:min(560px,96%); background:linear-gradient(180deg,#22242c,#1a1b21); border:1px solid #33353f;
+    border-radius:18px; padding:30px 30px 24px; box-shadow:0 24px 70px rgba(0,0,0,.6); text-align:center; max-height:94vh; overflow-y:auto}
+  .wl-logo{font-size:15px; letter-spacing:2px; color:var(--txt-dim); font-weight:700}
+  .wl-logo span{color:var(--accent)}
+  .wl-catch{font-size:26px; font-weight:900; line-height:1.4; margin:12px 0 6px; color:#fff}
+  .wl-catch b{color:#ffd479}
+  .wl-sub{font-size:14px; color:var(--txt-dim); margin-bottom:22px; line-height:1.7}
+  .wl-opts{display:flex; flex-direction:column; gap:11px}
+  .wl-opt{display:flex; align-items:center; gap:13px; text-align:left; width:100%; cursor:pointer;
+    background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; color:var(--txt)}
+  .wl-opt:hover{border-color:var(--accent); background:#2a2d36}
+  .wl-opt.primary{background:linear-gradient(100deg,#2b5da8,#204a86); border-color:#1b3f74}
+  .wl-opt .wl-ico{font-size:26px; flex:none}
+  .wl-opt .wl-t{font-size:16px; font-weight:700; color:#fff}
+  .wl-opt .wl-d{font-size:12px; color:var(--txt-dim); margin-top:2px}
+  .wl-opt.primary .wl-d{color:#cfe0ff}
+  .wl-skip{margin-top:16px; background:none; border:none; color:var(--txt-dim); font-size:12.5px; cursor:pointer; text-decoration:underline}
+  .wl-skip:hover{color:var(--txt)}
 </style>
 </head>
 <body>
 
+<div id="welcome">
+  <div class="wl-card">
+    <div class="wl-logo">Chord<span>Lab</span></div>
+    <div class="wl-catch">音楽理論ゼロでも、<br><b>30分で1曲</b>つくれる。</div>
+    <div class="wl-sub">ブラウザだけで動く、<b>作りながら学べる</b>作曲アプリ。<br>まずはどちらから始めますか？</div>
+    <div class="wl-opts">
+      <button class="wl-opt primary" id="wlCourse">
+        <span class="wl-ico">🎓</span>
+        <span><span class="wl-t">はじめてなので、教わりながら作る</span><span class="wl-d">7ステップの講座。読み進めるだけで1曲完成（おすすめ）</span></span>
+      </button>
+      <button class="wl-opt" id="wlProject">
+        <span class="wl-ico">🎼</span>
+        <span><span class="wl-t">もう分かるので、自分で作る</span><span class="wl-d">まっさらなプロジェクトで自由に打ち込む</span></span>
+      </button>
+      <button class="wl-opt" id="wlHowto">
+        <span class="wl-ico">❓</span>
+        <span><span class="wl-t">まず使い方をざっと見る</span><span class="wl-d">操作の辞書＋クイックスタート＋用語集</span></span>
+      </button>
+    </div>
+    <button class="wl-skip" id="wlSkip">スキップして始める</button>
+  </div>
+</div>
+
 <div id="toolbar">
-  <div class="logo">Chord<span>Lab</span></div>
+  <div class="logo" title="音楽理論ゼロでも30分で1曲つくれる作曲アプリ">Chord<span>Lab</span></div>
   <div class="tb-group">
     <button class="tb-btn" id="btnUndo" title="一手前に戻す (Ctrl+Z)" disabled>↶</button>
     <button class="tb-btn" id="btnRedo" title="やり直す (Ctrl+Y)" disabled>↷</button>
@@ -486,6 +546,14 @@
         <div class="insp-title">🎵 コード提案（代理・次の一手）</div>
         <div id="suggestBox"></div>
         <div class="hint-txt"><b>🔄代理</b>＝選択中コードと同じ役割で置き換え可能／<b>➡次</b>＝自然につながる次のコード。クリックで反映＆試聴。</div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">🔍 楽曲アナライザー</div>
+        <div class="insp-row">
+          <button class="sm-btn" id="btnAnalyze" title="いまのコード進行とメロディを分析して解説します">🔍 いまの曲を分析</button>
+        </div>
+        <div id="analyzerOut" class="analyzer-out"></div>
+        <div class="hint-txt">進行が定番パターンか判定＋メロディの<b>コードトーン率・順次/跳躍・キー適合</b>を採点。作った後に押すと勉強になります。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">★ お気に入りコード</div>
@@ -1340,6 +1408,112 @@ function renderSuggest(){
     html+='<div class="sug-row">'+dia.map(d=>sugChip(d.root,d.q,d.roman,'add')).join('')+'</div>';
   }
   box.innerHTML=html; wireSuggest(box,targetIdx);
+}
+
+/* ===== 楽曲アナライザー（進行解析＋メロディ分析、AI不要のルールベース） ===== */
+function scalePcs(){ const d=DIA[S.scaleType]; return new Set(d.offs.map(o=>(S.keyRoot+o)%12)); }
+const NAMED_PROG=[
+  {n:'王道進行', s:[3,4,2,5], d:'J-POPの超定番。切なくも前向きな響き'},
+  {n:'カノン進行', s:[0,4,5,2,3,0,3,4], d:'壮大で感動的（パッヘルベルのカノン由来）'},
+  {n:'小室進行', s:[5,3,4,0], d:'疾走感・エモさの定番（vi-IV-V-I）'},
+  {n:'ツーファイブ・ワン', s:[1,4,0], d:'なめらかに解決するジャズの基本（ii-V-I）'},
+  {n:'循環コード', s:[0,5,3,4], d:'ずっと回せる安定進行（I-vi-IV-V）'},
+  {n:'カノン前半（ベース下降）', s:[0,4,5,2], d:'やさしく下っていく流れ'},
+];
+function cyclicRepeatMatch(deg,s){
+  if(deg.length<s.length || deg.length % s.length!==0) return false;
+  for(let r=0;r<s.length;r++){
+    const rot=s.slice(r).concat(s.slice(0,r));
+    let ok=true;
+    for(let i=0;i<deg.length;i++){ if(deg[i]!==rot[i%s.length]){ ok=false; break; } }
+    if(ok) return true;
+  }
+  return false;
+}
+function analyzeProgression(){
+  const prog=S.prog; if(!prog.length) return {empty:true};
+  const dia=diatonic();
+  const degs=prog.map(c=>degIndexOf(c.root,c.q));
+  const romans=prog.map((c,i)=> degs[i]>=0 ? {t:dia[degs[i]].roman, out:false} : {t:chordName(c.root,c.q), out:true});
+  const funcs=degs.map(d=> d>=0? funcOfIndex(d) : null);
+  const named=degs.some(d=>d<0)? null : NAMED_PROG.find(p=>cyclicRepeatMatch(degs,p.s));
+  const minorish=prog.filter(c=>/^(m|dim|m7|m7b5)$/.test(c.q)).length;
+  const impression = S.scaleType==='minor' ? '暗め・切ない印象'
+    : (minorish/prog.length>=0.6 ? 'しっとり・切ない印象' : minorish===0 ? '明るくストレートな印象' : '明るさと切なさが混ざった印象');
+  const first=funcs[0], last=funcs[funcs.length-1];
+  let resolve = last==='T' ? '最後がトニックで“着地”する解決感のある進行' :
+                last==='D' ? '最後がドミナントで“次に続く”ループ向きの進行' :
+                last==='S' ? '最後がサブドミナントで“ふわっと開いた”余韻の残る終わり' : '';
+  return {romans, funcs, named, impression, resolve, outCount:degs.filter(d=>d<0).length};
+}
+function analyzeMelody(track){
+  const mel=S.tracks[track]; const keys=Object.keys(mel);
+  if(keys.length<2) return {few:true, count:keys.length};
+  const notes=keys.map(k=>{const [m,s]=k.split(':').map(Number);return {m,s};}).sort((a,b)=>a.s-b.s||a.m-b.m);
+  const sc=scalePcs();
+  let inScale=0; notes.forEach(n=>{ if(sc.has(((n.m%12)+12)%12)) inScale++; });
+  const cs=chordStarts();
+  let chordEval=0, chordHit=0;
+  if(cs.length) notes.forEach(n=>{
+    const c=cs.find(x=>n.s>=x.start && n.s<x.start+x.steps);
+    if(c){ chordEval++; const pcs=new Set(CHORD[c.ch.q].iv.map(iv=>(c.ch.root+iv)%12)); if(pcs.has(((n.m%12)+12)%12)) chordHit++; }
+  });
+  let stepN=0, leapN=0;
+  for(let i=1;i<notes.length;i++){ if(notes[i].s===notes[i-1].s) continue; const d=Math.abs(notes[i].m-notes[i-1].m); if(d===0) continue; if(d<=2) stepN++; else leapN++; }
+  const mids=notes.map(n=>n.m);
+  return {count:keys.length, inScalePct:Math.round(inScale/notes.length*100),
+    chordPct: chordEval? Math.round(chordHit/chordEval*100):null,
+    stepPct: (stepN+leapN)? Math.round(stepN/(stepN+leapN)*100):null,
+    range:[Math.min(...mids),Math.max(...mids)], noteN:notes.length};
+}
+function meter(label,pct,goodMsg,midMsg,badMsg,color){
+  const cls=pct>=70?'az-good':pct>=45?'az-mid':'az-bad';
+  const msg=pct>=70?goodMsg:pct>=45?midMsg:badMsg;
+  return `<div class="az-meter"><div class="az-lab"><span>${label}</span><span>${pct}%</span></div>`+
+    `<div class="az-bar"><span style="width:${pct}%;background:${color}"></span></div>`+
+    `<div class="az-note ${cls}">${msg}</div></div>`;
+}
+const midiName=m=>{ const pc=PC[((m%12)+12)%12]; return pc+(Math.floor(m/12)-1); };
+function renderAnalyzer(){
+  const out=$('analyzerOut'); if(!out) return;
+  const p=analyzeProgression();
+  let html='';
+  // --- 進行 ---
+  html+='<div class="az-block"><div class="az-h">🎼 コード進行</div>';
+  if(p.empty){ html+='<div class="az-note az-mid">コードがまだありません。パレットやプリセットで進行を作ってから分析してね。</div>'; }
+  else{
+    html+='<div class="az-romans">'+p.romans.map(r=>`<span class="az-rom${r.out?' out':''}">${r.t}</span>`).join('')+'</div>';
+    if(p.named){ html+=`<div><span class="az-name">✨ ${p.named.n}</span></div><div class="az-note">${p.named.d}</div>`; }
+    else if(p.outCount>0){ html+='<div class="az-note az-mid">キー外のコードを含むオリジナル進行。ハマればとても個性的です。</div>'; }
+    else{ html+='<div class="az-note">定番パターンには一致しないオリジナルの進行です。</div>'; }
+    const flow=p.funcs.map(f=>f||'?').join('→');
+    html+=`<div class="az-note">機能の流れ： <b>${flow}</b>（T=安定 / S=展開 / D=緊張）</div>`;
+    html+=`<div class="az-note">印象： ${p.impression}。${p.resolve}。</div>`;
+  }
+  html+='</div>';
+  // --- メロディ（アクティブトラック）---
+  const tr=S.activeTrack, label=TRACK_LABEL[tr]||tr;
+  html+=`<div class="az-block"><div class="az-h">🎶 メロディ分析（${label}）</div>`;
+  if(tr==='drums'){ html+='<div class="az-note az-mid">ドラムは音程がないため分析対象外。🎹ピアノなどに切り替えて分析してね。</div>'; }
+  else{
+    const m=analyzeMelody(tr);
+    if(m.few){ html+='<div class="az-note az-mid">このトラックの音が少なめ（'+m.count+'個）。数個以上置くと分析できます。</div>'; }
+    else{
+      if(m.chordPct!==null) html+=meter('コードトーン率', m.chordPct,
+        'コードによく乗っています👍 安定して聴こえます', 'まずまず。強拍（拍アタマ）にコードの音を置くとさらに安定',
+        'コード外の音が多め。コードをクリックすると出る<b>赤い音</b>を狙ってみて', '#4a9e6b');
+      else html+='<div class="az-note az-mid">コード進行を置くと「コードトーン率」も測れます。</div>';
+      html+=meter('なめらかさ（順次進行）', m.stepPct,
+        'なめらかで歌いやすいメロディ', '順次と跳躍のバランス型。動きがあってOK',
+        '跳躍が多め。となりの音への動きを増やすと歌いやすくなります', '#4a9eff');
+      html+=meter('キー適合', m.inScalePct,
+        'すべて（ほぼ）キー内の音でまとまっています', 'キー外の音がやや混在（味付けなら◎）',
+        'キー外の音が多め。狙いでなければスケール内に寄せると安定', '#c8963a');
+      html+=`<div class="az-note">音域： ${midiName(m.range[0])} 〜 ${midiName(m.range[1])}（${m.noteN}音）</div>`;
+    }
+  }
+  html+='</div>';
+  out.innerHTML=html;
 }
 function wireSuggest(box,targetIdx){
   box.querySelectorAll('.sug-chip').forEach(b=>{
@@ -2712,6 +2886,7 @@ renderSongList();
 $('btnSaveSong').addEventListener('click',saveSong);
 $('btnShareSong').addEventListener('click',shareCurrent);
 $('btnExportMidi').addEventListener('click',exportMidi);
+$('btnAnalyze').addEventListener('click',renderAnalyzer);
 $('btnCopyNotes').addEventListener('click',copySel);
 $('btnPasteNotes').addEventListener('click',doPaste);
 $('btnDupNotes').addEventListener('click',doDuplicate);
@@ -2724,6 +2899,21 @@ $('btnUndo').addEventListener('click',undo);
 $('btnRedo').addEventListener('click',redo);
 prevSnap=JSON.stringify(snapshot()); updateUndoBtn(); // 履歴の基準を初期化
 document.addEventListener('pointerdown',()=>initAudio(),{once:true});
+
+/* ===== 初回だけ「ようこそ」導線を表示 ===== */
+const WELCOME_KEY='chordlab-welcomed-v1';
+function closeWelcome(){ $('welcome').classList.remove('on'); try{ localStorage.setItem(WELCOME_KEY,'1'); }catch(e){} }
+function maybeShowWelcome(){
+  // 共有リンクで開いた時は曲を見せたいので出さない
+  if(location.hash.indexOf('song=')>=0) return;
+  let seen=false; try{ seen=!!localStorage.getItem(WELCOME_KEY); }catch(e){}
+  if(!seen) $('welcome').classList.add('on');
+}
+$('wlCourse').addEventListener('click',()=>{ closeWelcome(); setView('course'); });
+$('wlProject').addEventListener('click',()=>{ closeWelcome(); setView('project'); });
+$('wlHowto').addEventListener('click',()=>{ closeWelcome(); setView('howto'); });
+$('wlSkip').addEventListener('click',()=>{ closeWelcome(); });
+maybeShowWelcome();
 </script>
 </body>
 </html>
