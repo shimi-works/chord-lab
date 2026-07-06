@@ -44,6 +44,9 @@
   .tb-btn:hover{background:linear-gradient(#46464f,#33333a)}
   .tb-btn.on{background:linear-gradient(#1f6fd8,#155bb8); border-color:#0d3f85; color:#fff;
     box-shadow:0 0 8px rgba(74,158,255,.5)}
+  /* 道具モード中のロールのカーソル */
+  body.tool-cut #rollBody, body.tool-cut #rollBody *{cursor:crosshair}
+  body.tool-glue #rollBody, body.tool-glue #rollBody *{cursor:cell}
   #btnRec.on{background:linear-gradient(#e0483a,#b8352a); border-color:#7a1e16; color:#fff;
     box-shadow:0 0 10px rgba(255,80,80,.65); animation:recblink 1s steps(2) infinite}
   @keyframes recblink{50%{opacity:.55}}
@@ -405,6 +408,12 @@
     <button class="tb-btn" id="zoomXplus" title="横を広げる">横＋</button>
     <button class="tb-btn" id="zoomXminus" title="横を縮める（横圧縮）">横−</button>
   </div>
+  <div class="tb-group">
+    <span class="tb-lbl">道具</span>
+    <button class="tb-btn on" id="toolSel" data-tool="normal" title="ふつう（選択・移動・配置）">🖐</button>
+    <button class="tb-btn" id="toolCut" data-tool="cut" title="ハサミ：音符をクリックした所で切る">✂️</button>
+    <button class="tb-btn" id="toolGlue" data-tool="glue" title="のり：音符をクリックで右どなりの音とつなげて長くする">🔗</button>
+  </div>
   <div class="tabs">
     <button class="tab on" id="tabProject">🎼 プロジェクト</button>
     <button class="tab" id="tabHowto">❓ 使い方</button>
@@ -450,7 +459,7 @@
       <div class="insp-sec">
         <div class="insp-title">コードパレット</div>
         <div id="palette"></div>
-        <div class="hint-txt">パレットを<b>コードレーンへドラッグ</b>で追加。<b>タップ</b>すると構成音がロールに赤く光ります（試聴）。</div>
+        <div class="hint-txt"><b>コードレーンへドラッグ</b>＝進行に追加／<b>ピアノロールへドラッグ</b>＝その和音を音符で配置。<b>タップ</b>で構成音を赤く表示（試聴）。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">★ お気に入りコード</div>
@@ -1134,6 +1143,35 @@ function drawTrackNotes(tr, active){
    クリック=ノート配置 / 空きドラッグ=矩形範囲選択 / ノートをドラッグ=まとめて移動
    ノート右端ハンドル=長さ変更 / 選択して Delete=まとめて削除 */
 const DRAG_TH=4; // これ以上動いたらドラッグ開始とみなす(px)
+/* ===== 道具（ハサミ＝切る / のり＝つなぐ）===== */
+let rollTool='normal';
+function setTool(tool){
+  rollTool=tool;
+  ['toolSel','toolCut','toolGlue'].forEach(id=>{ const b=$(id); if(b) b.classList.toggle('on', b.dataset.tool===tool); });
+  document.body.classList.toggle('tool-cut', tool==='cut');
+  document.body.classList.toggle('tool-glue', tool==='glue');
+}
+/* ハサミ：ノートをクリックした step で2つに切る */
+function cutNoteAt(key, step){
+  const mel=CM(); const [m,s]=key.split(':').map(Number); const L=mel[key];
+  if(step<=s || step>=s+L) return; // 端では切らない
+  delete mel[key];
+  mel[m+':'+s]=step-s;         // 左側
+  mel[m+':'+step]=(s+L)-step;  // 右側
+  selNotes.clear(); renderTimeline(); save();
+}
+/* のり：同じ行で右どなりのノートと結合して1つの長い音にする */
+function glueNote(key){
+  const mel=CM(); const [m,s]=key.split(':').map(Number);
+  let bestKey=null, bestS=Infinity;
+  for(const k in mel){ if(k===key) continue; const [mm,ss]=k.split(':').map(Number);
+    if(mm===m && ss>s && ss<bestS){ bestS=ss; bestKey=k; } }
+  if(!bestKey) return; // 右に相手がいない
+  const L2=mel[bestKey];
+  mel[key]=(bestS+L2)-s; delete mel[bestKey];
+  selNotes.clear(); renderTimeline(); save();
+}
+document.querySelectorAll('[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
 function rollHit(ev){
   const rect=$('rollBody').getBoundingClientRect();
   const x=ev.clientX-rect.left-KEYW, y=ev.clientY-rect.top;
@@ -1172,6 +1210,14 @@ function autoScroll(ev){
 $('rollBody').addEventListener('pointerdown',ev=>{
   if(ev.button!==0) return;
   const t=ev.target;
+  // 道具モード（ハサミ／のり）：音符をクリックで実行し、他の操作はしない
+  if(rollTool!=='normal'){
+    const h=rollHit(ev);
+    if(h.track && h.track!==S.activeTrack) setActiveTrack(h.track);
+    const k=(t.classList.contains('note')&&t.dataset.key)?t.dataset.key:(h.inGrid?findNoteAt(h.midi,h.step):null);
+    if(k){ if(rollTool==='cut') cutNoteAt(k,h.step); else if(rollTool==='glue') glueNote(k); }
+    return;
+  }
   // 右端ハンドル → リサイズ
   if(t.classList.contains('note-handle')){
     const [m,s]=t.parentNode.dataset.key.split(':').map(Number);
@@ -1374,7 +1420,28 @@ function palUp(ev){
     S.prog.splice(idx,0,{root:d.root,q:d.q,len:S.beatsPerBar});
     selBlock=idx; palAssist=null; recordRecentChord(d.root,d.q);
     renderTimeline(); save(); playChordNow(d.root,d.q);
+    return;
   }
+  // ロール上にドロップ → その和音を音符として配置
+  const rb=$('rollBody').getBoundingClientRect();
+  if(ev.clientY>=rb.top && ev.clientY<=rb.bottom) placeChordOnRoll(d.root,d.q,ev);
+}
+/* パレットの和音を、ドロップ位置のトラック・高さに音符として置く */
+function placeChordOnRoll(root,q,ev){
+  const hit=rollHit(ev); if(!hit.inGrid) return;
+  const tr=hit.track||S.activeTrack;
+  if(tr!==S.activeTrack) setActiveTrack(tr);
+  const mel=S.tracks[tr];
+  const qz=S.quantize||1, step=Math.floor(hit.step/qz)*qz, len=SPB(); // 1小節分の長さ
+  const ivs=CHORD[q].iv, maxIv=Math.max.apply(null,ivs);
+  // ルート音をドロップ位置に近いオクターブへ（chord全体がロール音域に収まるよう調整）
+  let rootMidi=hit.midi-((((hit.midi-root)%12)+12)%12);
+  while(rootMidi+maxIv>TOP_MIDI) rootMidi-=12;
+  while(rootMidi<BOT_MIDI) rootMidi+=12;
+  ivs.forEach(iv=>{ const m=rootMidi+iv; if(m>=BOT_MIDI&&m<=TOP_MIDI) mel[m+':'+step]=len; });
+  recordRecentChord(root,q);
+  selNotes.clear(); renderTimeline(); save();
+  if(AC) ivs.forEach(iv=>{ const m=rootMidi+iv; if(m>=BOT_MIDI&&m<=TOP_MIDI) playNote(m,AC.currentTime,0.6,0.4,tr); });
 }
 
 /* ================= お気に入り / 最近使ったコード ================= */
