@@ -2258,23 +2258,24 @@ function litChord(pcs){
 window.addEventListener('keydown',ev=>{
   if(ev.repeat) return;
   const tag=document.activeElement?.tagName;
+  const onRoll=(curView==='project'||curView==='course'); // ロールを触れる画面（講座もロール編集する）
   // Ctrl+Z / Ctrl+Y（入力欄にいる時以外）
   if((ev.ctrlKey||ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase()==='z' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); undo(); return; }
   if((ev.ctrlKey||ev.metaKey) && (ev.key.toLowerCase()==='y' || (ev.shiftKey && ev.key.toLowerCase()==='z')) && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); redo(); return; }
-  // ノートのコピー/貼り付け/複製（入力欄以外・プロジェクト画面）
-  if((ev.ctrlKey||ev.metaKey) && curView==='project' && tag!=='INPUT' && tag!=='TEXTAREA'){
+  // ノートのコピー/貼り付け/複製（入力欄以外・ロール画面＝プロジェクト/講座）
+  if((ev.ctrlKey||ev.metaKey) && onRoll && tag!=='INPUT' && tag!=='TEXTAREA'){
     const kk=ev.key.toLowerCase();
     if(kk==='c'){ ev.preventDefault(); copySel(); return; }
     if(kk==='v'){ ev.preventDefault(); doPaste(); return; }
     if(kk==='d'){ ev.preventDefault(); doDuplicate(); return; }
   }
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
-  if(ev.code==='Space'){ ev.preventDefault(); if(curView==='project') play(); return; }
+  if(ev.code==='Space'){ ev.preventDefault(); if(onRoll) play(); return; }
   if(ev.key==='Enter' && quizActive() && qMode==='press'){ judge(); return; }
-  if(ev.key==='Escape' && curView==='project'){
+  if(ev.key==='Escape' && onRoll){
     selNotes.clear(); selBlock=-1; palAssist=null; renderTimeline(); return;
   }
-  if((ev.key==='Delete'||ev.key==='Backspace') && curView==='project'){
+  if((ev.key==='Delete'||ev.key==='Backspace') && onRoll){
     if(selNotes.size){ // 選択メロディノートをまとめて削除
       const mel=CM(); for(const k of selNotes) delete mel[k];
       selNotes.clear(); renderTimeline(); save(); return;
