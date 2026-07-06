@@ -267,24 +267,34 @@
   ::-webkit-scrollbar-track{background:#1b1b1f}
   ::-webkit-scrollbar-thumb{background:#3c3c44;border-radius:5px;border:2px solid #1b1b1f}
   ::-webkit-scrollbar-thumb:hover{background:#4a4a54}
-  /* 作曲講座パネル（プロジェクト画面の上に浮かせる） */
-  #coursePanel{display:none; position:fixed; right:16px; bottom:150px; width:340px; z-index:60;
-    background:linear-gradient(#2b2f3a,#23262e); border:1px solid var(--accent2);
-    border-radius:12px; box-shadow:0 12px 34px rgba(0,0,0,.55); padding:14px 16px}
-  .cp-head{display:flex; align-items:center; gap:8px; font-weight:700; color:#fff; font-size:13px; margin-bottom:8px}
-  #cpStep{margin-left:auto; font-size:12px; color:var(--accent); font-weight:700}
-  #cpClose{background:transparent; border:none; color:var(--txt-dim); font-size:18px; cursor:pointer; line-height:1; padding:0 2px}
-  #cpClose:hover{color:#fff}
-  .cp-title{font-size:18px; font-weight:700; color:#ffd479; margin-bottom:6px}
-  .cp-body{font-size:13px; line-height:1.75; color:var(--txt); margin-bottom:10px}
-  .cp-task{font-size:13px; color:#fff; background:rgba(74,158,255,.16); border:1px solid var(--accent2);
-    border-radius:8px; padding:8px 10px; margin-bottom:8px}
+  /* 作曲講座ガイド（左半分の大きな解説パネル） */
+  #courseGuide{display:none; flex-direction:column; width:44%; min-width:340px; max-width:560px;
+    background:linear-gradient(#262a33,#20232b); border-right:2px solid var(--accent2)}
+  body.course-on #courseGuide{display:flex}   /* course モードだけ表示 */
+  body.course-on #inspector{display:none}      /* 講座中はインスペクタを隠して場所を確保 */
+  body.course-on.course-show-insp #inspector{display:flex}  /* コード配置ステップだけパレットを出す */
+  .cg-top{display:flex; align-items:center; gap:10px; padding:12px 18px; border-bottom:1px solid var(--line);
+    background:linear-gradient(#2f3644,#262a33)}
+  .cg-badge{font-weight:700; color:#fff; font-size:14px}
+  .cg-step{margin-left:auto; font-size:13px; color:var(--accent); font-weight:700}
+  .cg-scroll{flex:1; overflow-y:auto; padding:18px 22px}
+  .cg-foot{border-top:1px solid var(--line); padding:12px 18px; background:#1f2229}
+  .cp-title{font-size:24px; font-weight:800; color:#ffd479; margin-bottom:12px; line-height:1.3}
+  .cp-body{font-size:15px; line-height:1.95; color:var(--txt)}
+  .cp-body h4{font-size:16px; color:#8fd0ff; margin:16px 0 6px}
+  .cp-body b{color:var(--orange)}
+  .cp-body .exp-play{background:linear-gradient(#1f6fd8,#155bb8); border:1px solid #0d3f85; color:#fff;
+    border-radius:20px; padding:6px 13px; font-size:13px; cursor:pointer; margin:4px 6px 4px 0; display:inline-block}
+  .cp-body .exp-play:hover{filter:brightness(1.12)}
+  .cp-body .cg-note{background:rgba(255,255,255,.05); border-left:3px solid var(--accent); padding:8px 12px; border-radius:0 6px 6px 0; margin:12px 0; font-size:14px}
+  .cp-task{font-size:15px; color:#fff; background:rgba(57,217,138,.13); border:1px solid var(--green);
+    border-radius:10px; padding:12px 14px; margin-top:18px}
   .cp-task b{color:#ffd479}
-  .cp-status{font-size:13px; font-weight:700; min-height:20px; margin-bottom:10px}
+  .cp-status{font-size:14px; font-weight:700; min-height:22px; margin-bottom:10px}
   .cp-status.ok{color:var(--green)} .cp-status.wait{color:var(--txt-dim)}
-  .cp-nav{display:flex; gap:8px}
+  .cp-nav{display:flex; gap:10px}
   .cp-nav button{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
-    border-radius:7px; padding:9px; font-size:14px; cursor:pointer}
+    border-radius:8px; padding:11px; font-size:15px; cursor:pointer}
   .cp-nav button:hover:not(:disabled){border-color:var(--accent)}
   .cp-nav button.primary{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a; color:#fff; font-weight:700}
   .cp-nav button:disabled{opacity:.4; cursor:not-allowed}
@@ -351,22 +361,28 @@
   </div>
 </div>
 
-<!-- ============ 作曲講座パネル ============ -->
-<div id="coursePanel">
-  <div class="cp-head"><span>🎓 作曲講座</span><span id="cpStep">1 / 5</span><button id="cpClose" title="閉じる">×</button></div>
-  <div class="cp-title" id="cpTitle"></div>
-  <div class="cp-body" id="cpBody"></div>
-  <div class="cp-task" id="cpTask"></div>
-  <div class="cp-status" id="cpStatus"></div>
-  <div class="cp-nav">
-    <button id="cpPrev">◀ 戻る</button>
-    <button id="cpNext" class="primary">次へ ▶</button>
-  </div>
-</div>
-
 <div id="main">
   <!-- ============ project view ============ -->
   <div class="view on" id="projectView">
+    <!-- 作曲講座ガイド（左半分・course モードで表示） -->
+    <div id="courseGuide">
+      <div class="cg-top">
+        <span class="cg-badge">🎓 作曲講座</span>
+        <span id="cpStep" class="cg-step">1 / 6</span>
+      </div>
+      <div class="cg-scroll">
+        <div class="cp-title" id="cpTitle"></div>
+        <div class="cp-body" id="cpBody"></div>
+        <div class="cp-task" id="cpTask"></div>
+      </div>
+      <div class="cg-foot">
+        <div class="cp-status" id="cpStatus"></div>
+        <div class="cp-nav">
+          <button id="cpPrev">◀ 戻る</button>
+          <button id="cpNext" class="primary">次へ ▶</button>
+        </div>
+      </div>
+    </div>
     <div id="inspector">
       <div class="insp-sec">
         <div class="insp-title">マイソング（曲の保存・共有）</div>
@@ -1832,7 +1848,7 @@ function setView(v){
   $('tabProject').classList.toggle('on',v==='project');
   $('tabCourse').classList.toggle('on',v==='course');
   $('tabQuiz').classList.toggle('on',v==='quiz');
-  $('coursePanel').style.display = v==='course'?'block':'none';
+  document.body.classList.toggle('course-on', v==='course');
   clearKbdMarks(); litChord(null);
   if(v==='quiz'){ stop(); setLearnMode(learnMode); }
   if(v==='course'){ renderCourse(); startCourseTick(); } else { stopCourseTick(); }
@@ -1843,73 +1859,118 @@ $('tabQuiz').addEventListener('click',()=>setView('quiz'));
 
 /* ================= 作曲講座（ガイド付き・条件クリアで次へ） ================= */
 const COURSE=[
-  {title:'① コードを置こう', track:'piano',
-   body:'コードは曲の“土台”です。左の<b>パレット</b>からコードを、右の<b>コードレーン</b>へドラッグして置いてみよう。上の「プリセット進行」（王道進行など）を使ってもOK。',
-   task:'コードを <b>3つ以上</b> 置く', hint:'左パレットのコードをコードレーンへドラッグ',
-   check:()=>S.prog.length>=3},
-  {title:'② ベースを入れよう', track:'bass',
-   body:'ベースは低音で曲を支える大黒柱。上の「トラック」を<b>🎸ベース</b>に切り替えました。ベースのロールに、コードの一番下の音（ルート）を<b>Altを押しながらクリック</b>で置こう。',
-   task:'ベースの音を <b>3つ以上</b> 置く', hint:'Alt＋クリックでベースのロールに配置',
-   check:()=>Object.keys(S.tracks.bass).length>=3},
-  {title:'③ ドラムを入れよう', track:'drums',
-   body:'ドラムはリズムの心臓。「トラック」を<b>🥁ドラム</b>にしました。ロールの<b>下＝キック</b>、<b>中＝スネア</b>、<b>上＝ハット</b>。キックとスネアを交互に置いてみよう。',
-   task:'ドラムを <b>4つ以上</b> 置く', hint:'下段キック→中段スネアを交互に',
-   check:()=>Object.keys(S.tracks.drums).length>=4},
-  {title:'④ メロディを入れよう', track:'piano',
-   body:'メロディは曲の主役＝“歌”になる部分。「トラック」を<b>🎹ピアノ</b>にしました。コードに合う音を、高めの位置に置いていこう。',
-   task:'メロディ（ピアノ）を <b>4つ以上</b> 置く', hint:'コードの構成音から選ぶと合いやすい',
-   check:()=>Object.keys(S.tracks.piano).length>=4},
-  {title:'⑤ ギターで厚みを', track:'guitar',
-   body:'仕上げにギター。「トラック」を<b>🎸ギター</b>にしました。コードと同じ音を重ねると厚みが出ます。置いたら▶で再生して完成を聞いてみよう！',
-   task:'ギターを <b>3つ以上</b> 置く', hint:'コードと同じ音を重ねる',
-   check:()=>Object.keys(S.tracks.guitar).length>=3},
+  { title:'はじめに ― このアプリの使い方', track:null,
+    body:`<p>ようこそ！ここは、<b>コードやメロディを打ち込んで曲を作る</b>ためのアプリです。まずは画面の見方だけ、かんたんに覚えましょう。</p>
+      <h4>🖥 画面のつくり</h4>
+      <p>この講座では、右側に<b>ピアノロール</b>という編集エリアが出ています。上から順に：<br>
+      ・<b>コードレーン</b>（青い帯）＝曲のコード進行を並べる場所<br>
+      ・<b>4つのトラック</b>＝🎹ピアノ / 🎸ギター / 🎸ベース / 🥁ドラム。楽器ごとに音を置きます<br>
+      ・いちばん下の<b>鍵盤</b>＝クリックすると音が鳴ります（PCのキーでも弾けます）</p>
+      <h4>▶ 再生のしかた</h4>
+      <p>上のバーの <b>▶</b> ボタン（またはキーボードの <b>Space</b>）で再生・停止。<b>⏮</b>で先頭に戻ります。</p>
+      <h4>✏️ 音の置き方（超重要）</h4>
+      <p>ロールの上で <b>Altキーを押しながらクリック</b> すると、そこに音符（ノート）が置けます。<br>
+      ・置いた音を<b>クリック</b>＝選択　／　<b>ドラッグ</b>＝移動　／　<b>右端をドラッグ</b>＝長さ変更<br>
+      ・<b>Deleteキー</b>で選択した音を削除　／　<b>Ctrl+Z</b>で一手戻せます（安心して試してOK）</p>
+      <div class="cg-note">🔰 まずは気軽に。まちがえても Ctrl+Z で戻せます。準備ができたら「次へ」で作曲スタート！</div>`,
+    task:'画面の見方を確認したら「次へ」を押そう', check:()=>true },
+
+  { title:'STEP 1 ― コードって何？置いてみよう', track:null,
+    body:`<h4>🎹 コードとは</h4>
+      <p><b>コードは、2つ以上の音を同時に鳴らした“響き”</b>のこと。たとえば「ド・ミ・ソ」を一緒に鳴らすと <b>C（シー）</b> という明るいコードになります。曲の<b>土台・伴奏</b>になる部分です。</p>
+      <p><button class="exp-play" data-play="0:">🔊 ド・ミ・ソ（C）を聞く</button></p>
+      <h4>😊 明るい / 😢 暗い</h4>
+      <p>コードには明るい<b>メジャー</b>と、暗い・切ない<b>マイナー</b>があります。真ん中の音がちょっと違うだけ。聞き比べてみて：</p>
+      <p><button class="exp-play" data-play="0:">🔊 C（明るい）</button><button class="exp-play" data-play="0:m">🔊 Cm（暗い）</button></p>
+      <h4>🎵 コード進行＝コードの流れ</h4>
+      <p>コードをいくつか並べた流れを<b>コード進行</b>といい、これが曲の骨組みになります。有名な進行はボタン一発で置けます。</p>
+      <div class="cg-note">👉 <b>やり方</b>：左のパレットのコードを<b>コードレーンへドラッグ</b>。または左の「プリセット進行」で王道進行などを選んで「進行をセット」。<br>※このステップの間だけ、左にパレットを表示しています。</div>`,
+    task:'コードを <b>3つ以上</b> 置く（パレットをドラッグ or プリセット）', check:()=>S.prog.length>=3, showInspector:true },
+
+  { title:'STEP 2 ― ベースで低音を支える', track:'bass',
+    body:`<h4>🎸 ベースの役割</h4>
+      <p>ベースは<b>いちばん低い音</b>で曲を支える大黒柱。ベースがあると一気に“曲っぽく”なります。基本は<b>コードのルート音</b>（コード名になっている音。Cならド）を鳴らします。</p>
+      <p><button class="exp-play" data-play="0:">🔊 参考：Cの響き（この一番下がルート）</button></p>
+      <div class="cg-note">👉 <b>やり方</b>：上の「トラック」を<b>🎸ベース</b>にしました（自動）。ベースのロールで <b>Alt＋クリック</b> して低めの音を置こう。コードのルートに合わせると自然です。</div>`,
+    task:'ベースの音を <b>3つ以上</b> 置く（Alt＋クリック）', check:()=>Object.keys(S.tracks.bass).length>=3 },
+
+  { title:'STEP 3 ― ドラムでリズムを作る', track:'drums',
+    body:`<h4>🥁 ドラムの役割</h4>
+      <p>ドラムは<b>リズム＝ノリ</b>を作る心臓部。音程はなく、<b>叩く場所</b>で音が変わります。このアプリではドラムのロールを3段に分けています：</p>
+      <p>・ロールの<b>下＝キック</b>（ドンッという低い音）<br>・<b>中＝スネア</b>（タンッ）<br>・<b>上＝ハット</b>（チッチッ）</p>
+      <div class="cg-note">👉 <b>やり方</b>：トラックを<b>🥁ドラム</b>にしました。まずは「<b>キック→スネア→キック→スネア</b>」を交互に置くのが基本のビート。各行の左に「キック/スネア/ハット」と書いてあります。</div>`,
+    task:'ドラムを <b>4つ以上</b> 置く（下＝キック・中＝スネア）', check:()=>Object.keys(S.tracks.drums).length>=4 },
+
+  { title:'STEP 4 ― メロディ＝曲の主役', track:'piano',
+    body:`<h4>🎹 メロディとは</h4>
+      <p>メロディは<b>“歌”になる主役の音の並び</b>。コードやベースが伴奏なら、メロディは口ずさむ部分です。ひとつずつ音が並びます（同時に重ねない）。</p>
+      <h4>💡 合う音の選び方</h4>
+      <p>むずかしく考えず、<b>今のコードに使われている音</b>（＝コードの構成音）を選ぶと外しません。コードレーンのコードをクリックすると、ロールにその構成音が<b>赤く光る</b>ので、その高さを狙うと合わせやすいです。</p>
+      <div class="cg-note">👉 <b>やり方</b>：トラックを<b>🎹ピアノ</b>にしました。高め（上のほう）の音を、Alt＋クリックで置いていこう。</div>`,
+    task:'メロディ（ピアノ）を <b>4つ以上</b> 置く', check:()=>Object.keys(S.tracks.piano).length>=4 },
+
+  { title:'STEP 5 ― ギターで厚みを足して完成', track:'guitar',
+    body:`<h4>🎸 仕上げのギター</h4>
+      <p>最後にギターで<b>厚み・華やかさ</b>を足します。コードと<b>同じ音</b>を重ねるだけでOK。これで「コード・ベース・ドラム・メロディ・ギター」の5パートがそろい、バンドのように鳴ります。</p>
+      <div class="cg-note">👉 <b>やり方</b>：トラックを<b>🎸ギター</b>にしました。コードの音に合わせて数個置いたら、上の <b>▶（再生）</b> で全部いっしょに聞いてみよう！</div>`,
+    task:'ギターを <b>3つ以上</b> 置く', check:()=>Object.keys(S.tracks.guitar).length>=3 },
 ];
 let courseStep=0, courseTimer=null, courseDone=false;
 function renderCourse(){
   const s=COURSE[courseStep];
+  courseDone=false;
   $('cpStep').textContent=(courseStep+1)+' / '+COURSE.length;
   $('cpTitle').textContent=s.title;
   $('cpBody').innerHTML=s.body;
-  $('cpTask').innerHTML='🎯 目標：'+s.task+'　<span style="color:var(--txt-dim)">（'+s.hint+'）</span>';
-  // そのステップの担当トラックに自動で切替（コード除く）
-  if(s.track && S.activeTrack!==s.track){ S.activeTrack=s.track; const el=$('instSel'); if(el) el.value=s.track; renderTimeline(); }
+  // body内の🔊試聴ボタンを配線
+  $('cpBody').querySelectorAll('.exp-play').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const seq=btn.dataset.play.split(',');
+      for(let i=0;i<seq.length;i++){ const [r,q]=seq[i].split(':'); playChordNow(+r,q||'',0.9); if(i<seq.length-1) await new Promise(rr=>setTimeout(rr,750)); }
+    });
+  });
+  $('cpTask').innerHTML = '🎯 '+s.task;
+  // 担当トラックに自動切替
+  if(s.track && S.activeTrack!==s.track){ S.activeTrack=s.track; const el=$('instSel'); if(el) el.value=s.track; }
+  // このステップだけインスペクタ（パレット等）を出す指定があれば出す
+  document.body.classList.toggle('course-show-insp', !!s.showInspector);
+  renderTimeline();
   $('cpPrev').disabled = courseStep===0;
   courseCheck();
 }
 function courseCheck(){
   const s=COURSE[courseStep];
-  const done=s.check();
+  const done=!!s.check();
+  const last=courseStep===COURSE.length-1;
   const nx=$('cpNext'), st=$('cpStatus');
   nx.disabled=!done;
+  nx.textContent = last ? '完成する 🎉' : '次へ ▶';
   if(done){
     st.className='cp-status ok';
-    st.textContent = courseStep===COURSE.length-1 ? '✅ 条件クリア！「完成する」で仕上げ' : '✅ できた！「次へ」を押そう';
-    nx.textContent = courseStep===COURSE.length-1 ? '完成する 🎉' : '次へ ▶';
+    st.textContent = courseStep===0 ? '✅ OK！「次へ」で始めよう'
+      : last ? '✅ 条件クリア！「完成する」で仕上げ' : '✅ できた！「次へ」を押そう';
   }else{
     st.className='cp-status wait';
     st.textContent='⏳ 目標を達成すると「次へ」が押せます';
-    nx.textContent = courseStep===COURSE.length-1 ? '完成する 🎉' : '次へ ▶';
   }
 }
 function startCourseTick(){ stopCourseTick(); courseTimer=setInterval(courseCheck,400); }
 function stopCourseTick(){ if(courseTimer){ clearInterval(courseTimer); courseTimer=null; } }
 $('cpNext').addEventListener('click',()=>{
-  if(courseDone){ // 完成後の「もう一度」
-    courseDone=false; courseStep=0; renderCourse(); startCourseTick(); return;
-  }
+  if(courseDone){ courseDone=false; courseStep=0; renderCourse(); startCourseTick(); return; }
   if(!COURSE[courseStep].check()) return;
   if(courseStep<COURSE.length-1){ courseStep++; renderCourse(); }
-  else { // 完成
+  else {
     courseDone=true; stopCourseTick();
+    document.body.classList.remove('course-show-insp');
     $('cpTitle').textContent='🎉 完成！おめでとう';
-    $('cpBody').innerHTML='コード・ベース・ドラム・メロディ・ギターが揃いました。<b>▶で再生</b>して聞いてみよう。「マイソング」で保存や共有もできます。';
+    $('cpBody').innerHTML='<p>コード・ベース・ドラム・メロディ・ギターの5パートがそろいました！ 上の <b>▶（再生）</b> で全体を聞いてみよう。</p><p>気に入ったら、左の「マイソング」で<b>名前を付けて保存</b>したり、<b>🔗共有リンク</b>で友だちに送れます。もっと自由に作りたくなったら、上のタブ「🎼 プロジェクト」でいつでも編集できます。</p>';
     $('cpTask').innerHTML=''; $('cpStatus').textContent=''; $('cpStatus').className='cp-status';
-    $('cpNext').textContent='もう一度 ▶'; $('cpNext').disabled=false;
+    $('cpNext').disabled=false;
     play();
   }
 });
 $('cpPrev').addEventListener('click',()=>{ if(courseStep>0){ courseStep--; renderCourse(); } });
-$('cpClose').addEventListener('click',()=>setView('project'));
 
 function initControls(){
   const ks=$('keyRoot');
