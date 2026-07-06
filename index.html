@@ -75,6 +75,16 @@
   .insp-title{font-size:11px; color:var(--txt-dim); letter-spacing:1px; margin-bottom:8px; text-transform:uppercase}
   #palette{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .drum-pat-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .chord-shelf{display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; min-height:20px}
+  .shelf-empty{font-size:11px; color:var(--txt-dim); padding:2px}
+  .chord-chip{display:inline-flex; align-items:stretch; background:linear-gradient(#3a3a42,#2b2b31);
+    border:1px solid #1a1a1e; border-radius:5px; overflow:hidden}
+  .chord-chip:hover{border-color:var(--accent)}
+  .cchip-name{background:transparent; border:none; color:var(--txt); cursor:pointer; font-size:13px; font-weight:600; padding:4px 6px 4px 8px}
+  .cchip-name:hover{color:#fff}
+  .cchip-star{background:transparent; border:none; border-left:1px solid #1a1a1e; color:var(--txt-dim); cursor:pointer; font-size:12px; padding:0 6px}
+  .cchip-star.on{color:#ffd479}
+  .cchip-star:hover{color:#ffd479}
   #mixer{display:flex; flex-direction:column; gap:5px}
   .mix-row{display:flex; align-items:center; gap:5px}
   .mix-name{flex:1; font-size:12px; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -441,6 +451,13 @@
         <div class="insp-title">コードパレット</div>
         <div id="palette"></div>
         <div class="hint-txt">パレットを<b>コードレーンへドラッグ</b>で追加。<b>タップ</b>すると構成音がロールに赤く光ります（試聴）。</div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">★ お気に入りコード</div>
+        <div id="favChords" class="chord-shelf"></div>
+        <div class="insp-title" style="margin-top:10px">🕘 最近使ったコード</div>
+        <div id="recentChords" class="chord-shelf"></div>
+        <div class="hint-txt">チップを<b>クリック</b>で進行の最後に追加。<b>☆/★</b>でお気に入り登録・解除。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">プリセット進行</div>
@@ -1355,9 +1372,57 @@ function palUp(ev){
       acc+=w;
     }
     S.prog.splice(idx,0,{root:d.root,q:d.q,len:S.beatsPerBar});
-    selBlock=idx; palAssist=null;
+    selBlock=idx; palAssist=null; recordRecentChord(d.root,d.q);
     renderTimeline(); save(); playChordNow(d.root,d.q);
   }
+}
+
+/* ================= お気に入り / 最近使ったコード ================= */
+const RECENT_KEY='chordlab-recent-v1', FAV_KEY='chordlab-fav-v1', RECENT_MAX=12;
+function loadArr(k){ try{ return JSON.parse(localStorage.getItem(k))||[]; }catch(e){ return []; } }
+function storeArr(k,a){ localStorage.setItem(k, JSON.stringify(a)); }
+let recentChords=loadArr(RECENT_KEY), favChords=loadArr(FAV_KEY);
+const chordKey=(r,q)=>r+':'+(q||'');
+function recordRecentChord(root,q){
+  const key=chordKey(root,q);
+  recentChords=recentChords.filter(c=>chordKey(c.root,c.q)!==key);
+  recentChords.unshift({root,q});
+  if(recentChords.length>RECENT_MAX) recentChords.length=RECENT_MAX;
+  storeArr(RECENT_KEY,recentChords); renderChordShelf();
+}
+function toggleFav(root,q){
+  const key=chordKey(root,q); const i=favChords.findIndex(c=>chordKey(c.root,c.q)===key);
+  if(i>=0) favChords.splice(i,1); else favChords.push({root,q});
+  storeArr(FAV_KEY,favChords); renderChordShelf();
+}
+const isFav=(root,q)=>favChords.some(c=>chordKey(c.root,c.q)===chordKey(root,q));
+/* コードを進行の末尾に追加（お気に入り/最近チップのクリック） */
+function appendChord(root,q){
+  S.prog.push({root,q,len:S.beatsPerBar});
+  selBlock=S.prog.length-1; palAssist=null; recordRecentChord(root,q);
+  renderTimeline(); save(); playChordNow(root,q);
+}
+function makeChordChip(c, showStar){
+  const chip=document.createElement('div'); chip.className='chord-chip';
+  const nm=document.createElement('button'); nm.className='cchip-name'; nm.type='button';
+  nm.textContent=chordName(c.root,c.q); nm.title='クリックで進行の最後に追加';
+  nm.addEventListener('click',()=>appendChord(c.root,c.q));
+  chip.appendChild(nm);
+  const star=document.createElement('button'); star.className='cchip-star'; star.type='button';
+  const fav=isFav(c.root,c.q);
+  star.textContent=fav?'★':'☆'; star.title=fav?'お気に入りから外す':'お気に入りに追加';
+  if(fav) star.classList.add('on');
+  star.addEventListener('click',e=>{ e.stopPropagation(); toggleFav(c.root,c.q); });
+  chip.appendChild(star);
+  return chip;
+}
+function renderChordShelf(){
+  const fb=$('favChords'), rb=$('recentChords'); if(!fb||!rb) return;
+  fb.innerHTML=''; rb.innerHTML='';
+  if(!favChords.length){ fb.innerHTML='<span class="shelf-empty">☆でお気に入り登録</span>'; }
+  else favChords.forEach(c=>fb.appendChild(makeChordChip(c)));
+  if(!recentChords.length){ rb.innerHTML='<span class="shelf-empty">まだありません</span>'; }
+  else recentChords.forEach(c=>rb.appendChild(makeChordChip(c)));
 }
 $('btnPreset').addEventListener('click',()=>{
   const p=PRESETS[$('presetSel').value]; if(!p) return;
@@ -2277,6 +2342,7 @@ updateLoopBtn();
 renderStats();
 renderExplain();
 renderMixer();
+renderChordShelf();
 renderSongList();
 $('btnSaveSong').addEventListener('click',saveSong);
 $('btnShareSong').addEventListener('click',shareCurrent);
