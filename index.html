@@ -655,10 +655,10 @@ const S = {
   prog:[],                 // [{root, q, len}] len=拍数(1〜16)
   tracks:{piano:{},guitar:{},bass:{},drums:{}}, // 楽器ごとの独立メロディ "midi:step"->長さ
   mixer:{ // 楽器ごとの音量・ミュート・ソロ
-    piano :{mute:false,solo:false,vol:0.85},
-    guitar:{mute:false,solo:false,vol:0.75},
-    bass  :{mute:false,solo:false,vol:0.85},
-    drums :{mute:false,solo:false,vol:0.8},
+    piano :{mute:false,solo:false,vol:1.0},
+    guitar:{mute:false,solo:false,vol:0.9},
+    bass  :{mute:false,solo:false,vol:1.0},
+    drums :{mute:false,solo:false,vol:0.95},
   },
   quiz:{correct:0,total:0,streak:0,best:0},
 };
@@ -689,16 +689,20 @@ function applyZoom(axis, dir){
 const $ = id => document.getElementById(id);
 
 /* ================= オーディオ ================= */
-let AC=null, master=null;
+let AC=null, master=null, trackGain={};
 function initAudio(){
   if(AC) { if(AC.state==='suspended') AC.resume(); return; }
   AC = new (window.AudioContext||window.webkitAudioContext)();
-  const comp = AC.createDynamicsCompressor();
-  comp.threshold.value=-18; comp.ratio.value=6;
-  master = AC.createGain(); master.gain.value=0.6;
+  const comp = AC.createDynamicsCompressor(); // ピークだけ抑えるリミッター（全体は大きく）
+  comp.threshold.value=-3; comp.ratio.value=12;
+  try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
+  master = AC.createGain(); master.gain.value=1.0; // 全体音量（コンプで歪み防止）
   master.connect(comp); comp.connect(AC.destination);
+  // トラックごとの音量ノード（合成音・サンプル音の両方がここを通る）
+  TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); trackGain[tr]=g; });
   loadSoundfonts(); // 高音質サンプルの読み込み開始（非同期・失敗しても合成音で鳴る）
 }
+function trackOut(inst){ return (trackGain[inst]||master); }
 // 楽器ごとの合成パラメータ（サンプルが読めない時のフォールバック）
 const INST={
   piano :{o1:'triangle',o2:'sawtooth',o2g:0.25,det:4,lp:3200,oct:0,  rel:0.18,sus:0.55},
@@ -715,7 +719,7 @@ function loadSoundfonts(retries){
   sfLoaded=true;
   for(const tr in SF_MAP){
     try{
-      Soundfont.instrument(AC, SF_MAP[tr], {destination:master})
+      Soundfont.instrument(AC, SF_MAP[tr], {destination:trackGain[tr]||master})
         .then(inst=>{ SF[tr]=inst; })
         .catch(()=>{}); // 失敗時はそのトラックだけ合成音のまま
     }catch(e){}
@@ -730,13 +734,13 @@ function playNote(midi, when, dur, vel=0.4, inst){
   // サンプル音源があればそれで鳴らす（無ければ下の合成音）
   if(SF[inst]){
     const oct=(INST[inst]&&INST[inst].oct)||0;
-    try{ SF[inst].play(midi+oct, t, {duration:dur, gain:Math.min(1.4, vel*3.2)}); return; }catch(e){}
+    try{ SF[inst].play(midi+oct, t, {duration:dur, gain:Math.min(3, vel*5)}); return; }catch(e){}
   }
   const p = INST[inst] || INST.piano;
   const f = 440*Math.pow(2,(midi+p.oct-69)/12);
   const g = AC.createGain();
   const lp = AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=p.lp;
-  g.connect(lp); lp.connect(master);
+  g.connect(lp); lp.connect(trackOut(inst));
   const o1=AC.createOscillator(); o1.type=p.o1; o1.frequency.value=f;
   const o2=AC.createOscillator(); o2.type=p.o2; o2.frequency.value=f; o2.detune.value=p.det;
   const g2=AC.createGain(); g2.gain.value=p.o2g;
@@ -751,7 +755,7 @@ function playNote(midi, when, dur, vel=0.4, inst){
 }
 // ドラム：音程はないので、ノートの高さで キック/スネア/ハイハット を割り当て
 function playDrum(midi,t,vel){
-  const g=AC.createGain(); g.connect(master);
+  const g=AC.createGain(); g.connect(trackOut('drums'));
   // ロール音域(C4-C6)を3分割：下=キック / 中=スネア / 上=ハイハット
   if(midi<=67){ // キック
     const o=AC.createOscillator(); o.type='sine';
@@ -1404,7 +1408,12 @@ function renderMixer(){
   });
   box.querySelectorAll('[data-m]').forEach(b=>b.addEventListener('click',()=>{ S.mixer[b.dataset.m].mute=!S.mixer[b.dataset.m].mute; renderMixer(); save(); }));
   box.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click',()=>{ S.mixer[b.dataset.s].solo=!S.mixer[b.dataset.s].solo; renderMixer(); save(); }));
-  box.querySelectorAll('[data-v]').forEach(sl=>sl.addEventListener('input',()=>{ S.mixer[sl.dataset.v].vol=(+sl.value)/100; save(); }));
+  box.querySelectorAll('[data-v]').forEach(sl=>sl.addEventListener('input',()=>{
+    const tr=sl.dataset.v, v=(+sl.value)/100;
+    S.mixer[tr].vol=v;
+    if(trackGain[tr]) trackGain[tr].gain.value=v; // 音量ノードに即反映
+    save();
+  }));
 }
 $('btnDelBlock').addEventListener('click',()=>{
   if(selBlock<0)return; S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save();
@@ -1542,7 +1551,8 @@ function schedule(){
     const anySolo=TRACKS.some(t=>S.mixer[t].solo); // ソロが1つでもあれば、それ以外は鳴らさない
     // コード伴奏はピアノ音色。ソロ中は隠す（ソロで単独に聞ける）
     const cs = chordStartList.find(c=>c.start===st);
-    if(cs && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.22*S.mixer.piano.vol,'piano'));
+    // 音量はトラックの音量ノード(trackGain)が担当。ここでは一定のベロシティで鳴らす
+    if(cs && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.3,'piano'));
     if(S.metro && st%4===0) click(nextTime, st%SPB()===0);
     for(const tr of TRACKS){
       const cfg=S.mixer[tr];
@@ -1550,7 +1560,7 @@ function schedule(){
       const mel=S.tracks[tr];
       for(const key in mel){
         const [midi,ms]=key.split(':').map(Number);
-        if(ms===st) playNote(midi,nextTime,stepDur()*mel[key]*0.95, 0.42*cfg.vol, tr);
+        if(ms===st) playNote(midi,nextTime,stepDur()*mel[key]*0.95, 0.5, tr);
       }
     }
     dispQueue.push({step:st,time:nextTime});
