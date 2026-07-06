@@ -71,6 +71,7 @@
   .insp-sec{border-bottom:1px solid var(--line); padding:10px}
   .insp-title{font-size:11px; color:var(--txt-dim); letter-spacing:1px; margin-bottom:8px; text-transform:uppercase}
   #palette{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .drum-pat-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .pal-btn{
     background:linear-gradient(#3a3a42,#2b2b31); border:1px solid #1a1a1e; border-radius:5px;
     padding:6px 4px; color:var(--txt); text-align:center;
@@ -293,6 +294,9 @@
     background:linear-gradient(#2f3644,#262a33)}
   .cg-badge{font-weight:700; color:#fff; font-size:14px}
   .cg-step{margin-left:auto; font-size:13px; color:var(--accent); font-weight:700}
+  #cpClose{background:var(--panel2); border:1px solid var(--line); color:var(--txt); cursor:pointer;
+    border-radius:6px; padding:5px 10px; font-size:12px; font-weight:700}
+  #cpClose:hover{border-color:var(--red); color:var(--red)}
   .cg-scroll{flex:1; overflow-y:auto; padding:18px 22px}
   .cg-foot{border-top:1px solid var(--line); padding:12px 18px; background:#1f2229}
   .cp-title{font-size:24px; font-weight:800; color:#ffd479; margin-bottom:12px; line-height:1.3}
@@ -385,6 +389,7 @@
       <div class="cg-top">
         <span class="cg-badge">🎓 作曲講座</span>
         <span id="cpStep" class="cg-step">1 / 6</span>
+        <button id="cpClose" title="講座を閉じる（プロジェクトへ）">✕ 閉じる</button>
       </div>
       <div class="cg-scroll">
         <div class="cp-title" id="cpTitle"></div>
@@ -427,6 +432,16 @@
         <div class="insp-row">
           <button class="sm-btn" id="btnPreset">進行をセット</button>
         </div>
+      </div>
+      <div class="insp-sec">
+        <div class="insp-title">ドラムパターン（貼り付け）</div>
+        <div class="drum-pat-grid">
+          <button class="sm-btn" data-drum="eight">🥁 8ビート</button>
+          <button class="sm-btn" data-drum="four">🥁 四つ打ち</button>
+          <button class="sm-btn" data-drum="rock">🥁 ロック</button>
+          <button class="sm-btn" data-drum="ballad">🥁 バラード</button>
+        </div>
+        <div class="hint-txt">クリックでドラムに丸ごと貼り付け（今の小節数ぶん）。ドラムトラックに切り替わります。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">U-FRETから読み込み</div>
@@ -1281,6 +1296,31 @@ $('btnPreset').addEventListener('click',()=>{
   S.prog=p.map(i=>({root:dia[i].root,q:dia[i].q,len:S.beatsPerBar}));
   selBlock=-1; renderTimeline(); save();
 });
+
+/* ================= ドラムパターン（コードのように貼り付け） ================= */
+const DRUM_KICK=60, DRUM_SNARE=70, DRUM_HAT=79; // ロール音域内：下=キック/中=スネア/上=ハット
+const DRUM_PATTERNS={
+  eight: {kick:[0,8],      snare:[4,12], hat:[0,2,4,6,8,10,12,14]}, // 8ビート
+  four:  {kick:[0,4,8,12], snare:[4,12], hat:[2,6,10,14]},          // 四つ打ち
+  rock:  {kick:[0,6,8],    snare:[4,12], hat:[0,2,4,6,8,10,12,14]}, // ロック（シンコペ）
+  ballad:{kick:[0],        snare:[8],    hat:[0,4,8,12]},           // バラード（ゆったり）
+};
+function applyDrumPattern(key){
+  const p=DRUM_PATTERNS[key]; if(!p) return;
+  const bars=totalBars(), spb=SPB(), d={};
+  for(let b=0;b<bars;b++){
+    const base=b*spb;
+    p.kick .forEach(s=>{ if(s<spb) d[DRUM_KICK +':'+(base+s)]=1; });
+    p.snare.forEach(s=>{ if(s<spb) d[DRUM_SNARE+':'+(base+s)]=1; });
+    p.hat  .forEach(s=>{ if(s<spb) d[DRUM_HAT  +':'+(base+s)]=1; });
+  }
+  S.tracks.drums=d;
+  S.activeTrack='drums'; const el=$('instSel'); if(el) el.value='drums';
+  selNotes.clear(); renderTimeline(); save();
+}
+document.querySelectorAll('[data-drum]').forEach(btn=>{
+  btn.addEventListener('click',()=>applyDrumPattern(btn.dataset.drum));
+});
 $('btnDelBlock').addEventListener('click',()=>{
   if(selBlock<0)return; S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save();
 });
@@ -1988,6 +2028,7 @@ $('cpNext').addEventListener('click',()=>{
   }
 });
 $('cpPrev').addEventListener('click',()=>{ if(courseStep>0){ courseStep--; renderCourse(); } });
+$('cpClose').addEventListener('click',()=>setView('project'));
 
 function initControls(){
   const ks=$('keyRoot');
