@@ -611,10 +611,18 @@
       </div>
       <div class="insp-sec">
         <div class="insp-title">🎲 自動メロディ生成</div>
+        <div class="insp-row" style="align-items:center">
+          <span class="tb-lbl" style="flex:none">密度</span>
+          <select id="genDensity" style="flex:1" title="音の詰まり具合">
+            <option value="sparse">まばら（ゆったり）</option>
+            <option value="normal" selected>ふつう</option>
+            <option value="busy">にぎやか（細かい）</option>
+          </select>
+        </div>
         <div class="insp-row">
           <button class="sm-btn" id="btnGenMelody" title="コード進行に合わせて、選択中トラックにメロディを自動生成します">🎲 選択トラックに自動生成</button>
         </div>
-        <div class="hint-txt">コード進行に合わせ、<b>コードの音＋順次進行</b>中心のメロディを作ります。今のトラックの内容は<b>置き換わります</b>（Ctrl+Zで戻せます）。何度でも押して好みの形を。</div>
+        <div class="hint-txt"><b>コードの音＋順次進行＋リズムのくり返し</b>でメロディを作り、最後はコードのルートに解決します。今のトラックの内容は<b>置き換わります</b>（Ctrl+Zで戻せます）。何度でも押して好みの形を。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">★ お気に入りコード</div>
@@ -1573,43 +1581,82 @@ function renderSuggest(){
 /* ===== 楽曲アナライザー（進行解析＋メロディ分析、AI不要のルールベース） ===== */
 function scalePcs(){ const d=DIA[S.scaleType]; return new Set(d.offs.map(o=>(S.keyRoot+o)%12)); }
 
-/* ===== 自動メロディ生成（コードに沿った順次進行中心） ===== */
+/* ===== 自動メロディ生成 =====
+   コードに沿った順次進行を基本に、リズムのモチーフ反復・跳躍後の折り返し・
+   終止（最後をルートへ解決）で“らしさ”を出す。全音ロール音域(60-84)内に収める。 */
 const nearestOf=(list,target)=>{ let best=list[0],bd=Infinity; for(const v of list){ const d=Math.abs(v-target); if(d<bd){bd=d;best=v;} } return best; };
+const MELODY_RANGE={ bass:[60,71], other:[67,83] };            // ロール音域(60-84)に必ず収める
+const GEN_DENSITY={ sparse:{rest:0.30,eighth:0.12}, normal:{rest:0.14,eighth:0.40}, busy:{rest:0.04,eighth:0.72} };
 function generateMelody(){
-  const tr=S.activeTrack;
-  if(tr==='drums'){ const st=$('songStatus'); if(st) st.textContent='ドラムには自動メロディは作れません。🎹ピアノ等に切り替えてね'; return; }
+  const tr=S.activeTrack, st=$('songStatus');
+  if(tr==='drums'){ if(st) st.textContent='ドラムには自動メロディは作れません。🎹ピアノ等に切り替えてね'; return; }
   const cs=chordStarts();
-  if(!cs.length){ const st=$('songStatus'); if(st) st.textContent='先にコード進行を作ってから押してね'; return; }
+  if(!cs.length){ if(st) st.textContent='先にコード進行を作ってから押してね'; return; }
   const sc=scalePcs();
-  const lo = tr==='bass'?52:67, hi = tr==='bass'?64:83;    // ベースは低め・他は高め
+  const [lo,hi] = tr==='bass' ? MELODY_RANGE.bass : MELODY_RANGE.other;
   const scaleMidis=[]; for(let m=lo;m<=hi;m++){ if(sc.has(((m%12)+12)%12)) scaleMidis.push(m); }
-  if(!scaleMidis.length) return;
-  const STEP=4; // 4分音符グリッド（1拍ごと）
-  const mel={}; let prev=null;
-  cs.forEach(seg=>{
+  if(scaleMidis.length<2) return;
+  const densName=($('genDensity') && $('genDensity').value) || 'normal';
+  const dens=GEN_DENSITY[densName]||GEN_DENSITY.normal;
+  const spb=SPB(), beats=S.beatsPerBar;
+  const totalSteps=cs[cs.length-1].start + cs[cs.length-1].steps;
+  const nBars=Math.max(1, Math.ceil(totalSteps/spb));
+
+  // 1小節ぶんのリズム（拍ごとのセル）を作り、各小節で使い回す＝モチーフの反復
+  const cell=()=>{ const r=Math.random();
+    if(r<dens.rest) return null;                 // 休符
+    if(r<dens.rest+dens.eighth) return [2,2];    // 8分×2
+    return [4]; };                                // 4分
+  const motif=[]; for(let b=0;b<beats;b++) motif.push(cell());
+  if(motif.every(c=>!c)) motif[0]=[4];            // 全部休符なら1つは鳴らす
+
+  const chordListAt=(step)=>{ const seg=cs.find(c=>step>=c.start&&step<c.start+c.steps)||cs[cs.length-1];
     const pcs=new Set(CHORD[seg.ch.q].iv.map(iv=>(seg.ch.root+iv)%12));
-    const chordMidis=scaleMidis.filter(m=>pcs.has(((m%12)+12)%12));
-    if(!chordMidis.length) return;
-    for(let s=seg.start; s<seg.start+seg.steps; s+=STEP){
-      const strong=((s-seg.start)%8===0); // コード頭や強拍
-      let midi;
-      if(prev===null){ midi=chordMidis[Math.floor(chordMidis.length/2)]; }
-      else if(strong){ midi=nearestOf(chordMidis, prev); }         // 強拍はコードトーン
-      else {
-        const i=scaleMidis.indexOf(nearestOf(scaleMidis,prev));    // 弱拍は隣へ順次進行
-        let dir=Math.random()<0.5?-1:1, ni=i+dir;
-        if(ni<0||ni>=scaleMidis.length) ni=i-dir;
-        midi=scaleMidis[ni];
-        if(Math.random()<0.35) midi=nearestOf(chordMidis, midi);   // 時々コードトーンへ寄せる
+    return scaleMidis.filter(m=>pcs.has(((m%12)+12)%12)); };
+
+  const mel={}; let prev=null, dir=Math.random()<0.5?-1:1;
+  for(let bar=0;bar<nBars;bar++){
+    for(let bt=0;bt<beats;bt++){
+      const c=motif[bt]; if(!c) continue;          // 休符
+      const beatStep=bar*spb+bt*4; if(beatStep>=totalSteps) break;
+      const chordList=chordListAt(beatStep); if(!chordList.length) continue;
+      let off=0;
+      for(const dur of c){
+        const step=beatStep+off; if(step>=totalSteps) break;
+        const strong=(off===0 && bt%2===0);        // 1・3拍目の頭＝強拍
+        let midi;
+        if(prev===null){ midi=nearestOf(chordList,(lo+hi)/2); }
+        else if(strong){ midi=nearestOf(chordList, prev); } // 強拍はコードトーン
+        else if(Math.random()<0.18){                 // たまに跳躍→次で逆向きに戻す（山なりの輪郭）
+          midi=nearestOf(chordList, prev+(dir>0?4:-4)); dir=-dir;
+        } else {                                     // 基本は隣の音へ順次進行
+          let i=scaleMidis.indexOf(nearestOf(scaleMidis,prev));
+          if(i<=0) dir=1; else if(i>=scaleMidis.length-1) dir=-1; else if(Math.random()<0.25) dir=-dir;
+          i=Math.max(0,Math.min(scaleMidis.length-1,i+dir));
+          if(scaleMidis[i]===prev) i=Math.max(0,Math.min(scaleMidis.length-1,i+dir));
+          midi=scaleMidis[i];
+        }
+        mel[midi+':'+step]=dur; prev=midi; off+=dur;
       }
-      mel[midi+':'+s]=STEP; prev=midi;
     }
-  });
+  }
+  // 終止：最後の音を最終コードのルート（近いオクターブ）へ解決し、最低4分に伸ばす
+  const keys=Object.keys(mel);
+  if(keys.length){
+    const lastStep=Math.max(...keys.map(k=>+k.split(':')[1]));
+    const lastKey=Object.keys(mel).find(k=>+k.split(':')[1]===lastStep);
+    const rootPc=((cs[cs.length-1].ch.root%12)+12)%12;
+    const roots=scaleMidis.filter(m=>((m%12)+12)%12===rootPc);
+    const target=roots.length? nearestOf(roots,+lastKey.split(':')[0]) : +lastKey.split(':')[0];
+    const oldLen=mel[lastKey]; delete mel[lastKey];
+    mel[target+':'+lastStep]=Math.max(oldLen,4);
+  }
   S.tracks[tr]=mel; selNotes.clear(); renderTimeline(); save();
-  const st=$('songStatus'); if(st) st.textContent=Object.keys(mel).length+'音のメロディを'+(TRACK_LABEL[tr]||tr)+'に生成しました';
+  const label={sparse:'まばら',normal:'ふつう',busy:'にぎやか'}[densName];
+  if(st) st.textContent=Object.keys(mel).length+'音のメロディを'+(TRACK_LABEL[tr]||tr)+'に生成しました（'+label+'）';
   if(AC){ // 生成結果をさっと試聴（先頭数音）
-    const ks=Object.keys(mel).sort((a,b)=>+a.split(':')[1]-+b.split(':')[1]).slice(0,4);
-    ks.forEach((k,i)=>{ const m=+k.split(':')[0]; playNote(m,AC.currentTime+i*0.18,0.16,0.4,tr); });
+    const ks=Object.keys(mel).sort((a,b)=>+a.split(':')[1]-+b.split(':')[1]).slice(0,5);
+    ks.forEach((k,i)=>{ const m=+k.split(':')[0]; playNote(m,AC.currentTime+i*0.16,0.16,0.4,tr); });
   }
 }
 const NAMED_PROG=[
