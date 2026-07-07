@@ -1667,6 +1667,12 @@ const NAMED_PROG=[
   {n:'循環コード', s:[0,5,3,4], d:'ずっと回せる安定進行（I-vi-IV-V）'},
   {n:'カノン前半（ベース下降）', s:[0,4,5,2], d:'やさしく下っていく流れ'},
 ];
+/* 回転させず、置いた順どおりに繰り返し一致するか（開始位置を尊重した完全一致） */
+function exactRepeatMatch(deg,s){
+  if(deg.length<s.length || deg.length % s.length!==0) return false;
+  for(let i=0;i<deg.length;i++){ if(deg[i]!==s[i%s.length]) return false; }
+  return true;
+}
 function cyclicRepeatMatch(deg,s){
   if(deg.length<s.length || deg.length % s.length!==0) return false;
   for(let r=0;r<s.length;r++){
@@ -1683,11 +1689,14 @@ function analyzeProgression(){
   const degs=prog.map(c=>degIndexOf(c.root,c.q));
   const romans=prog.map((c,i)=> degs[i]>=0 ? {t:dia[degs[i]].roman, out:false} : {t:chordName(c.root,c.q), out:true});
   const funcs=degs.map(d=> d>=0? funcOfIndex(d) : null);
-  const named=degs.some(d=>d<0)? null : NAMED_PROG.find(p=>cyclicRepeatMatch(degs,p.s));
+  // 開始位置どおりの完全一致を優先し（小室 vi-IV-V-I と循環 I-vi-IV-V の取り違え防止）、
+  // 無ければ回転一致にフォールバック（ループのどこを切っても定番として認識）
+  const named=degs.some(d=>d<0)? null
+    : (NAMED_PROG.find(p=>exactRepeatMatch(degs,p.s)) || NAMED_PROG.find(p=>cyclicRepeatMatch(degs,p.s)));
   const minorish=prog.filter(c=>/^(m|dim|m7|m7b5)$/.test(c.q)).length;
   const impression = S.scaleType==='minor' ? '暗め・切ない印象'
     : (minorish/prog.length>=0.6 ? 'しっとり・切ない印象' : minorish===0 ? '明るくストレートな印象' : '明るさと切なさが混ざった印象');
-  const first=funcs[0], last=funcs[funcs.length-1];
+  const last=funcs[funcs.length-1];
   let resolve = last==='T' ? '最後がトニックで“着地”する解決感のある進行' :
                 last==='D' ? '最後がドミナントで“次に続く”ループ向きの進行' :
                 last==='S' ? '最後がサブドミナントで“ふわっと開いた”余韻の残る終わり' : '';
@@ -1750,9 +1759,10 @@ function renderAnalyzer(){
         'コードによく乗っています👍 安定して聴こえます', 'まずまず。強拍（拍アタマ）にコードの音を置くとさらに安定',
         'コード外の音が多め。コードをクリックすると出る<b>赤い音</b>を狙ってみて', '#4a9e6b');
       else html+='<div class="az-note az-mid">コード進行を置くと「コードトーン率」も測れます。</div>';
-      html+=meter('なめらかさ（順次進行）', m.stepPct,
+      if(m.stepPct!==null) html+=meter('なめらかさ（順次進行）', m.stepPct,
         'なめらかで歌いやすいメロディ', '順次と跳躍のバランス型。動きがあってOK',
         '跳躍が多め。となりの音への動きを増やすと歌いやすくなります', '#4a9eff');
+      else html+='<div class="az-note az-mid">音の高さの動きがまだ少なく、なめらかさは測れません（違う高さの音を並べると測れます）。</div>';
       html+=meter('キー適合', m.inScalePct,
         'すべて（ほぼ）キー内の音でまとまっています', 'キー外の音がやや混在（味付けなら◎）',
         'キー外の音が多め。狙いでなければスケール内に寄せると安定', '#c8963a');
