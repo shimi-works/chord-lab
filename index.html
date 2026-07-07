@@ -1010,29 +1010,59 @@ function playNote(midi, when, dur, vel=0.4, inst){
   g.gain.exponentialRampToValueAtTime(0.0008,end+p.rel);
   o1.start(t); o2.start(t); o1.stop(end+0.25); o2.stop(end+0.25);
 }
-// ドラム：音程はないので、ノートの高さで キック/スネア/ハイハット を割り当て
-function playDrum(midi,t,vel){
-  const g=AC.createGain(); g.connect(trackOut('drums'));
-  // ロール音域(C4-C6)を3分割：下=キック / 中=スネア / 上=ハイハット
-  if(midi<=67){ // キック
-    const o=AC.createOscillator(); o.type='sine';
+/* ===== ドラムキット =====
+   ロールの行(midi)に打楽器を割り当てる。上＝シンバル/ハット、下＝キックの並び。
+   キック60・スネア70・ハット79は従来の位置を維持（既存の曲・パターンの互換）。
+   midiがキット定義の中間に来た場合は drumFor() が最も近い打楽器を返す。 */
+const DRUM_KIT=[
+  {midi:60, lbl:'キック',   name:'キック（バスドラム）',   gm:36, kind:'kick'},
+  {midi:66, lbl:'床タム',   name:'フロアタム',             gm:43, kind:'tom', f0:120, f1:60},
+  {midi:70, lbl:'スネア',   name:'スネア',                 gm:38, kind:'snare'},
+  {midi:73, lbl:'低タム',   name:'ロータム',               gm:47, kind:'tom', f0:180, f1:95},
+  {midi:76, lbl:'高タム',   name:'ハイタム',               gm:50, kind:'tom', f0:250, f1:140},
+  {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'noise', dur:0.045, hp:7000, g:0.5},
+  {midi:82, lbl:'開ハット', name:'オープンハイハット',     gm:46, kind:'noise', dur:0.30,  hp:6500, g:0.42},
+  {midi:84, lbl:'シンバル', name:'クラッシュシンバル',     gm:49, kind:'noise', dur:0.70,  hp:3500, g:0.5},
+];
+function drumFor(midi){ let best=DRUM_KIT[0], bd=Infinity; for(const p of DRUM_KIT){ const d=Math.abs(midi-p.midi); if(d<bd){ bd=d; best=p; } } return best; }
+function noiseBuf(ctx,dur){ const b=ctx.createBuffer(1, Math.max(1,Math.ceil(ctx.sampleRate*dur)), ctx.sampleRate);
+  const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+/* 1つの打楽器を発音（ライブ再生とWAVオフラインで共通。ctx/destだけ差し替える） */
+function synthDrum(ctx, dest, p, t, vel){
+  const g=ctx.createGain(); g.connect(dest);
+  if(p.kind==='kick'){
+    const o=ctx.createOscillator(); o.type='sine';
     o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
     o.connect(g);
     g.gain.setValueAtTime(vel*1.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
     o.start(t); o.stop(t+0.2);
-  }else{ // スネア/ハイハット（ノイズ）
-    const snare=midi<=75, dur=snare?0.18:0.05;
-    const buf=AC.createBuffer(1, Math.ceil(AC.sampleRate*dur), AC.sampleRate);
-    const dch=buf.getChannelData(0);
-    for(let i=0;i<dch.length;i++) dch[i]=Math.random()*2-1;
-    const src=AC.createBufferSource(); src.buffer=buf;
-    const hp=AC.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=snare?1200:6000;
+  }else if(p.kind==='tom'){
+    const o=ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(p.f0,t); o.frequency.exponentialRampToValueAtTime(p.f1,t+0.18);
+    o.connect(g);
+    g.gain.setValueAtTime(vel*0.95,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.30);
+    o.start(t); o.stop(t+0.32);
+  }else if(p.kind==='snare'){
+    const dur=0.18;
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
+    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
     src.connect(hp); hp.connect(g);
-    g.gain.setValueAtTime(vel*(snare?0.9:0.5),t);
-    g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    g.gain.setValueAtTime(vel*0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    src.start(t); src.stop(t+dur);
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(180,t);
+    const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
+    gb.gain.setValueAtTime(vel*0.32,t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.10);
+    o.start(t); o.stop(t+0.12);
+  }else{ // noise系（ハット・シンバル）
+    const dur=p.dur;
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
+    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=p.hp;
+    src.connect(hp); hp.connect(g);
+    g.gain.setValueAtTime(vel*(p.g||0.5),t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
     src.start(t); src.stop(t+dur);
   }
 }
+function playDrum(midi,t,vel){ synthDrum(AC, trackOut('drums'), drumFor(midi), t, vel); }
 function chordMidis(root,q,base=48){
   const r = base + ((root-base)%12+12)%12; // base以上で最小のroot
   return CHORD[q].iv.map(iv=>r+iv);
@@ -1270,9 +1300,9 @@ function buildRoll(){
       row.className='roll-row'+(black&&!isDrum?' blackrow':'')+(pc===0&&!isDrum?' crow':'');
       const key=document.createElement('div');
       key.className='row-key '+(isDrum?'drumkey':(black?'black':'white'));
-      // ドラムは音程が無いので、行ごとにどの打楽器かを表示（キック/スネア/ハット）
+      // ドラムは音程が無いので、行ごとにどの打楽器かを表示（キット8種）
       key.textContent = isDrum
-        ? (midi<=67?'キック':midi<=75?'スネア':'ハット')
+        ? drumFor(midi).lbl
         : (pc===0 ? 'C'+(Math.floor(midi/12)-1) : (black?'':PC[pc]));
       const cells=document.createElement('div');
       cells.className='row-cells'; cells.dataset.midi=midi; cells.dataset.track=tr;
@@ -1511,7 +1541,7 @@ function exportMidi(){
     ev.push({t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb(CHNAME[tr]))]}); // トラック名
     if(tr!=='drums') ev.push({t:0,d:[0xC0|ch, GM[tr]||0]});
     for(const k of keys){ const [m,s]=k.split(':').map(Number);
-      const note=(tr==='drums') ? (m<=67?36 : m<=75?38 : 42) : m;
+      const note=(tr==='drums') ? drumFor(m).gm : m; // ドラムはGMドラム番号へ
       const st=s*stepTicks, du=Math.max(1,mel[k]*stepTicks);
       ev.push({t:st,o:1,d:[0x90|ch,note,90]});
       ev.push({t:st+du,o:0,d:[0x80|ch,note,64]});
@@ -1554,27 +1584,7 @@ function renderSynthVoice(ctx, dest, inst, midi, t, dur, vel){
   g.gain.exponentialRampToValueAtTime(0.0008,end+p.rel);
   o1.start(t); o2.start(t); o1.stop(end+0.25); o2.stop(end+0.25);
 }
-function renderDrumVoice(ctx, dest, midi, t, vel){
-  const g=ctx.createGain(); g.connect(dest);
-  if(midi<=67){
-    const o=ctx.createOscillator(); o.type='sine';
-    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
-    o.connect(g);
-    g.gain.setValueAtTime(vel*1.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-    o.start(t); o.stop(t+0.2);
-  }else{
-    const snare=midi<=75, dur=snare?0.18:0.05;
-    const buf=ctx.createBuffer(1, Math.max(1,Math.ceil(ctx.sampleRate*dur)), ctx.sampleRate);
-    const dch=buf.getChannelData(0);
-    for(let i=0;i<dch.length;i++) dch[i]=Math.random()*2-1;
-    const src=ctx.createBufferSource(); src.buffer=buf;
-    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=snare?1200:6000;
-    src.connect(hp); hp.connect(g);
-    g.gain.setValueAtTime(vel*(snare?0.9:0.5),t);
-    g.gain.exponentialRampToValueAtTime(0.001,t+dur);
-    src.start(t); src.stop(t+dur);
-  }
-}
+function renderDrumVoice(ctx, dest, midi, t, vel){ synthDrum(ctx, dest, drumFor(midi), t, vel); }
 function audioBufferToWav(buf){
   const nch=buf.numberOfChannels, len=buf.length, sr=buf.sampleRate;
   const blockAlign=nch*2, dataSize=len*blockAlign;
@@ -2247,11 +2257,13 @@ $('btnPreset').addEventListener('click',()=>{
 });
 
 /* ================= ドラムパターン（コードのように貼り付け） ================= */
-const DRUM_KICK=60, DRUM_SNARE=70, DRUM_HAT=79; // ロール音域内：下=キック/中=スネア/上=ハット
+// キット行のmidi（DRUM_KITと一致させる）。hat=閉ハット/open=開ハット/crash=シンバル
+const DRUM_KICK=60, DRUM_SNARE=70, DRUM_HAT=79, DRUM_OPEN=82, DRUM_CRASH=84;
 const DRUM_PATTERNS={
-  eight: {kick:[0,8],      snare:[4,12], hat:[0,2,4,6,8,10,12,14]}, // 8ビート
-  four:  {kick:[0,4,8,12], snare:[4,12], hat:[2,6,10,14]},          // 四つ打ち
-  rock:  {kick:[0,6,8],    snare:[4,12], hat:[0,2,4,6,8,10,12,14]}, // ロック（シンコペ）
+  // crash は先頭小節の頭だけ／open は指定stepで開ハット
+  eight: {kick:[0,8],      snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]}, // 8ビート
+  four:  {kick:[0,4,8,12], snare:[4,12], hat:[2,6,10,14], open:[14], crash:[0]}, // 四つ打ち
+  rock:  {kick:[0,6,8],    snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]}, // ロック（シンコペ）
   ballad:{kick:[0],        snare:[8],    hat:[0,4,8,12]},           // バラード（ゆったり）
 };
 function applyDrumPattern(key){
@@ -2262,6 +2274,8 @@ function applyDrumPattern(key){
     p.kick .forEach(s=>{ if(s<spb) d[DRUM_KICK +':'+(base+s)]=1; });
     p.snare.forEach(s=>{ if(s<spb) d[DRUM_SNARE+':'+(base+s)]=1; });
     p.hat  .forEach(s=>{ if(s<spb) d[DRUM_HAT  +':'+(base+s)]=1; });
+    (p.open||[]).forEach(s=>{ if(s<spb) d[DRUM_OPEN+':'+(base+s)]=1; });
+    if(b===0) (p.crash||[]).forEach(s=>{ if(s<spb) d[DRUM_CRASH+':'+(base+s)]=1; }); // シンバルは曲頭のみ
   }
   S.tracks.drums=d;
   S.activeTrack='drums'; const el=$('instSel'); if(el) el.value='drums';
@@ -3006,7 +3020,7 @@ function renderHowto(){
       <p>上の「道具」で切り替え。<b>🖐 ふつう</b>＝選択・移動・配置。<b>✂️ ハサミ</b>＝音符をクリックした所で2つに切る。<b>🔗 のり</b>＝音符をクリックで右どなりの音とつなげて長くする。使い終わったら🖐に戻します。</p></div>
 
     <div class="ht-sec"><h3>🎛 トラックの切り替え</h3>
-      <p>上の「<b>音色</b>」で楽器を選ぶか、ロールの<b>各レーンをクリック</b>すると、その楽器が編集対象になります（他は薄く表示）。ドラムのレーンは<b>下＝キック／中＝スネア／上＝ハット</b>です。</p></div>
+      <p>上の「<b>音色</b>」で楽器を選ぶか、ロールの<b>各レーンをクリック</b>すると、その楽器が編集対象になります（他は薄く表示）。ドラムのレーンは<b>各行に楽器名（上＝シンバル/ハット・タム、下＝キック）</b>が表示され、キック・スネア・タム・ハット・シンバルなど8種を打ち込めます。</p></div>
 
     <div class="ht-sec"><h3>🎵 コードを手早く・かしこく置く</h3>
       <ul>
@@ -3122,7 +3136,7 @@ const COURSE=[
   { title:'STEP 4 ― ドラムでリズム（ノリ）を作る', track:'drums',
     body:`<h4>🥁 ドラムの役割</h4>
       <p>ドラムは<b>リズム＝ノリ</b>を作る心臓部。音程はなく、<b>叩く場所（高さ）</b>で音が変わります。このアプリはドラムのレーンを3段に分けています：</p>
-      <p>・<b>下＝キック</b>（ドンッ、低い）／・<b>中＝スネア</b>（タンッ）／・<b>上＝ハット</b>（チッチッ、細かい）</p>
+      <p>各行に楽器名が出ます。基本の3つは <b>キック</b>（ドンッ、低い）・<b>スネア</b>（タンッ）・<b>ハット</b>（チッチッ、細かい）。ほかに<b>タム・シンバル・開ハット</b>も使えます（上＝シンバル/ハット、下＝キック）。</p>
       <h4>🎵 いちばん使われる「8ビート」</h4>
       <p>J-POPの<b>約8割</b>が8ビートと言われる基本のリズム。作り方はシンプル：</p>
       <ul>
@@ -3131,7 +3145,7 @@ const COURSE=[
         <li><b>キック</b>：<b>1拍目と3拍目</b>を中心に（ドン、ドン）</li>
       </ul>
       <p>もう一つ、キックを<b>全拍ドンドンドンドン</b>と踏むのが<b>四つ打ち</b>（ダンスっぽい）。</p>
-      <div class="cg-note">👉 <b>やり方（ラクな方法）</b>：左パネルの「<b>ドラムパターン</b>」の <b>🥁8ビート</b> などを押すと、丸ごと貼り付きます！まずはこれで十分。自分で置くなら <b>Alt＋クリック</b> で「下＝キック／中＝スネア」を交互に。</div>`,
+      <div class="cg-note">👉 <b>やり方（ラクな方法）</b>：左パネルの「<b>ドラムパターン</b>」の <b>🥁8ビート</b> などを押すと、丸ごと貼り付きます！まずはこれで十分。自分で置くなら、各行の<b>楽器名</b>を見て <b>Alt＋クリック</b>（キックとスネアを交互に）。</div>`,
     task:'ドラムを <b>4つ以上</b> 置く（パターン貼り付け or Alt＋クリック）', check:()=>Object.keys(S.tracks.drums).length>=4, showInspector:true },
 
   { title:'STEP 5 ― メロディ＝曲の主役をのせる', track:'piano',
