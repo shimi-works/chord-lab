@@ -48,6 +48,7 @@
   body.tool-cut #rollBody, body.tool-cut #rollBody *{cursor:crosshair}
   body.tool-glue #rollBody, body.tool-glue #rollBody *{cursor:cell}
   body.tool-pen #rollBody, body.tool-pen #rollBody *{cursor:crosshair}
+  body.tool-erase #rollBody, body.tool-erase #rollBody *{cursor:not-allowed}
   #btnRec.on{background:linear-gradient(#e0483a,#b8352a); border-color:#7a1e16; color:#fff;
     box-shadow:0 0 10px rgba(255,80,80,.65); animation:recblink 1s steps(2) infinite}
   @keyframes recblink{50%{opacity:.55}}
@@ -513,6 +514,7 @@
     <span class="tb-lbl">道具</span>
     <button class="tb-btn on" id="toolSel" data-tool="normal" title="ふつう（選択・移動・配置）">🖐</button>
     <button class="tb-btn" id="toolPen" data-tool="pen" title="ペン：タップで音符を置く／音符をタップで消す（スマホ・タブレット向け）">✏️</button>
+    <button class="tb-btn" id="toolErase" data-tool="erase" title="消しゴム：タップで音符を消す／なぞって連続消し（スマホ向け）">🧹</button>
     <button class="tb-btn" id="toolCut" data-tool="cut" title="ハサミ：音符をクリックした所で切る">✂️</button>
     <button class="tb-btn" id="toolGlue" data-tool="glue" title="のり：音符をクリックで右どなりの音とつなげて長くする">🔗</button>
   </div>
@@ -1318,10 +1320,11 @@ const DRAG_TH=4; // これ以上動いたらドラッグ開始とみなす(px)
 let rollTool='normal';
 function setTool(tool){
   rollTool=tool;
-  ['toolSel','toolPen','toolCut','toolGlue'].forEach(id=>{ const b=$(id); if(b) b.classList.toggle('on', b.dataset.tool===tool); });
+  ['toolSel','toolPen','toolErase','toolCut','toolGlue'].forEach(id=>{ const b=$(id); if(b) b.classList.toggle('on', b.dataset.tool===tool); });
   document.body.classList.toggle('tool-cut', tool==='cut');
   document.body.classList.toggle('tool-glue', tool==='glue');
   document.body.classList.toggle('tool-pen', tool==='pen');
+  document.body.classList.toggle('tool-erase', tool==='erase');
 }
 /* ハサミ：ノートをクリックした step で2つに切る */
 function cutNoteAt(key, step){
@@ -1773,6 +1776,10 @@ $('rollBody').addEventListener('pointerdown',ev=>{
       else if(h.inGrid){ palAssist=null; rollDrag={mode:'place'}; placeAt(h); grab(ev); }
       return;
     }
+    if(rollTool==='erase'){ // 消しゴム：タップで消す／なぞって連続消し（保存は指離しで1回＝Undo1手）
+      if(k){ delete CM()[k]; selNotes.delete(k); renderNotes(); }
+      rollDrag={mode:'erase'}; grab(ev); return;
+    }
     if(k){ if(rollTool==='cut') cutNoteAt(k,h.step); else if(rollTool==='glue') glueNote(k); }
     return;
   }
@@ -1832,6 +1839,12 @@ $('rollBody').addEventListener('pointermove',ev=>{
   const dx=ev.clientX-(rollDrag.x0||0), dy=ev.clientY-(rollDrag.y0||0);
 
   if(rollDrag.mode==='place'){ if(hit.inGrid) placeAt(hit); return; } // Altドラッグで連続配置
+
+  if(rollDrag.mode==='erase'){ // 消しゴムをなぞる：通過した音符を消す
+    const k=hit.inGrid?findNoteAt(hit.midi,hit.step):null;
+    if(k && (k in CM())){ delete CM()[k]; selNotes.delete(k); renderNotes(); }
+    return;
+  }
 
   if(rollDrag.mode==='resize'){
     const key=rollDrag.midi+':'+rollDrag.start;
