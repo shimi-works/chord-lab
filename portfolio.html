@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chord Lab — 設計・実装ドシエ</title>
+<meta name="description" content="音楽理論ゼロでも作りながら学べる作曲Webアプリ Chord Lab の技術説明・設計思想。単一HTML・Vanilla JS・Web Audio API。">
+</head>
+<body>
+<style>
+  :root{
+    --bg:#eef0f4; --bg2:#e6e8ee; --panel:#ffffff; --panel2:#f3f4f8;
+    --ink:#191b22; --muted:#585c6d; --faint:#8a8e9e; --line:rgba(20,22,30,.12);
+    --accent:#c98a1f; --accent-soft:rgba(201,138,31,.14); --link:#2f6fd0;
+    --grid:rgba(20,22,30,.05); --note-a:#c98a1f; --note-b:#2f6fd0;
+    --shadow:0 18px 44px rgba(20,22,30,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#101116; --bg2:#0b0c10; --panel:#191b22; --panel2:#20232c;
+      --ink:#eceef4; --muted:#9ea2b4; --faint:#6a6e80; --line:rgba(255,255,255,.10);
+      --accent:#f0c15a; --accent-soft:rgba(240,193,90,.13); --link:#6aa8ff;
+      --grid:rgba(255,255,255,.05); --note-a:#f0c15a; --note-b:#6aa8ff;
+      --shadow:0 22px 60px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef0f4; --bg2:#e6e8ee; --panel:#ffffff; --panel2:#f3f4f8;
+    --ink:#191b22; --muted:#585c6d; --faint:#8a8e9e; --line:rgba(20,22,30,.12);
+    --accent:#c98a1f; --accent-soft:rgba(201,138,31,.14); --link:#2f6fd0;
+    --grid:rgba(20,22,30,.05); --note-a:#c98a1f; --note-b:#2f6fd0;
+    --shadow:0 18px 44px rgba(20,22,30,.10);
+  }
+  :root[data-theme="dark"]{
+    --bg:#101116; --bg2:#0b0c10; --panel:#191b22; --panel2:#20232c;
+    --ink:#eceef4; --muted:#9ea2b4; --faint:#6a6e80; --line:rgba(255,255,255,.10);
+    --accent:#f0c15a; --accent-soft:rgba(240,193,90,.13); --link:#6aa8ff;
+    --grid:rgba(255,255,255,.05); --note-a:#f0c15a; --note-b:#6aa8ff;
+    --shadow:0 22px 60px rgba(0,0,0,.55);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0}
+  .doc{
+    --sans:system-ui,-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    line-height:1.75; letter-spacing:.01em; -webkit-font-smoothing:antialiased;
+    font-feature-settings:"palt" 1;
+  }
+  .wrap{max-width:1000px; margin:0 auto; padding:0 24px}
+  section{padding:64px 0; border-top:1px solid var(--line)}
+  section:first-of-type{border-top:0}
+
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--accent); font-weight:700; margin:0 0 14px}
+  h2{font-size:clamp(24px,3.4vw,34px); line-height:1.25; margin:0 0 10px; letter-spacing:.01em;
+    text-wrap:balance; font-weight:800}
+  h3{font-size:17px; margin:0 0 6px; font-weight:750; letter-spacing:.01em}
+  p{margin:0 0 14px; color:var(--ink)}
+  .lead{color:var(--muted); font-size:17px; max-width:62ch}
+  .muted{color:var(--muted)}
+  a{color:var(--link); text-decoration:none}
+  a:hover{text-decoration:underline}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--link); outline-offset:3px; border-radius:4px}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative; overflow:hidden; background:var(--bg2); border-top:0; padding:0}
+  .hero-grid{position:absolute; inset:0; pointer-events:none;
+    background-image:
+      repeating-linear-gradient(90deg,transparent 0,transparent 63px,var(--grid) 63px,var(--grid) 64px),
+      repeating-linear-gradient(0deg,transparent 0,transparent 27px,var(--grid) 27px,var(--grid) 28px);
+    mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 92%);
+    -webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.9),transparent 92%);}
+  .hero-notes{position:absolute; inset:0; pointer-events:none; opacity:.9}
+  .hero-notes i{position:absolute; height:16px; border-radius:3px; display:block; opacity:.85}
+  .hero-inner{position:relative; padding:96px 0 80px}
+  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.24em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 20px}
+  .kicker b{color:var(--accent)}
+  h1{font-size:clamp(44px,8vw,86px); line-height:.98; margin:0 0 8px; letter-spacing:-.02em; font-weight:850}
+  h1 .lab{color:var(--accent)}
+  .tagline{font-size:clamp(18px,2.5vw,23px); color:var(--ink); max-width:22ch; margin:14px 0 0; font-weight:650; line-height:1.4}
+  .subtag{color:var(--muted); max-width:52ch; margin:14px 0 30px}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 30px}
+  .chip{font-family:var(--mono); font-size:12px; letter-spacing:.02em; color:var(--muted);
+    border:1px solid var(--line); background:var(--panel); padding:6px 11px; border-radius:999px}
+  .cta{display:inline-flex; align-items:center; gap:9px; font-family:var(--mono); font-size:14px; font-weight:600;
+    color:var(--bg2); background:var(--accent); padding:12px 20px; border-radius:10px; letter-spacing:.01em}
+  .cta:hover{text-decoration:none; filter:brightness(1.06)}
+  .cta .u{opacity:.7}
+
+  /* ---------- generic layout ---------- */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px}
+  .card .n{font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:700; letter-spacing:.06em}
+  .card h3{margin-top:10px}
+  .card p{margin:0; color:var(--muted); font-size:14.5px}
+
+  .lede-row{display:grid; grid-template-columns:1.1fr 1fr; gap:40px; align-items:start}
+
+  /* spec list */
+  .spec{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px}
+  .spec li{display:flex; gap:14px; padding:16px 0; border-top:1px solid var(--line)}
+  .spec li:first-child{border-top:0}
+  .spec .k{flex:none; width:150px; font-family:var(--mono); font-size:12.5px; color:var(--accent);
+    font-weight:700; letter-spacing:.02em; padding-top:2px; text-transform:uppercase}
+  .spec .v h3{margin:0 0 4px}
+  .spec .v p{margin:0; color:var(--muted); font-size:14.5px}
+  .spec .v code{font-family:var(--mono); font-size:12.5px; background:var(--panel2); color:var(--ink);
+    padding:1px 6px; border-radius:5px; border:1px solid var(--line)}
+
+  /* signal chain */
+  .chain{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:24px 0 6px}
+  .node{flex:1 1 120px; min-width:120px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:14px 14px 13px; position:relative}
+  .node .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--faint); text-transform:uppercase}
+  .node .name{font-weight:750; font-size:15px; margin-top:3px}
+  .node .sub{font-size:12.5px; color:var(--muted); margin-top:3px}
+  .node.accent{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+  .arrow{align-self:center; color:var(--faint); font-family:var(--mono); font-weight:700; flex:none}
+
+  .flow{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+  .flow span{font-family:var(--mono); font-size:12.5px; color:var(--muted); background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:7px 11px}
+  .flow b{color:var(--accent); font-weight:700}
+
+  /* feature map */
+  .fmap{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+  .fmap .col{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px}
+  .fmap .col h4{margin:0 0 10px; font-size:13px; font-family:var(--mono); letter-spacing:.05em;
+    text-transform:uppercase; color:var(--accent)}
+  .fmap ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:7px}
+  .fmap li{font-size:13.5px; color:var(--muted); line-height:1.5}
+
+  /* pull quote / principle */
+  .pill-list{display:flex; flex-direction:column; gap:0}
+  .principle{display:grid; grid-template-columns:52px 1fr; gap:18px; padding:22px 0; border-top:1px solid var(--line)}
+  .principle:first-child{border-top:0}
+  .principle .num{font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:700; padding-top:4px}
+  .principle h3{font-size:19px}
+  .principle p{margin:6px 0 0; color:var(--muted); max-width:60ch}
+
+  .callout{background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));
+    border-radius:14px; padding:22px 24px}
+  .callout p{margin:0; color:var(--ink)}
+  .callout .mono{font-family:var(--mono); font-size:13px; color:var(--muted); display:block; margin-top:10px; line-height:1.7}
+
+  footer{padding:56px 0 72px; border-top:1px solid var(--line); background:var(--bg2)}
+  footer .axis{font-size:clamp(20px,3vw,28px); font-weight:750; letter-spacing:.01em; text-wrap:balance; max-width:24ch}
+  footer .axis .hl{color:var(--accent)}
+  footer .links{display:flex; flex-wrap:wrap; gap:10px 22px; margin-top:22px; font-family:var(--mono); font-size:13.5px}
+  footer .sig{margin-top:28px; font-family:var(--mono); font-size:12px; color:var(--faint); letter-spacing:.04em}
+
+  @media (max-width:760px){
+    .grid2,.grid3,.lede-row,.fmap{grid-template-columns:1fr}
+    .fmap{grid-template-columns:1fr 1fr}
+    .spec .k{width:110px}
+    .principle{grid-template-columns:34px 1fr; gap:12px}
+    section{padding:48px 0}
+    .hero-inner{padding:72px 0 60px}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .cta{transition:filter .15s ease}
+    .card,.node{transition:border-color .15s ease}
+  }
+</style>
+
+<div class="doc">
+
+  <!-- ================= HERO ================= -->
+  <header class="hero">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-notes" aria-hidden="true" id="heroNotes"></div>
+    <div class="wrap hero-inner">
+      <p class="kicker">Portfolio &nbsp;/&nbsp; Web Application &nbsp;·&nbsp; <b>設計 &amp; 実装ドシエ</b></p>
+      <h1>Chord<span class="lab">Lab</span></h1>
+      <p class="tagline">音楽理論ゼロでも、<br>作りながら学べる作曲アプリ。</p>
+      <p class="subtag">ブラウザだけで動く、コード進行・メロディ・ドラムの打ち込みと、コード学習を1つにした単一HTMLアプリ。「知識を整理して“体験”に変える」という一貫した設計思想で作っています。</p>
+      <div class="chips">
+        <span class="chip">単一HTMLファイル</span>
+        <span class="chip">Vanilla JS · ビルドなし</span>
+        <span class="chip">Web Audio API</span>
+        <span class="chip">外部依存ほぼゼロ</span>
+        <span class="chip">GitHub Pages</span>
+      </div>
+      <a class="cta" href="https://shimi-works.github.io/chord-lab/" target="_blank" rel="noopener">
+        ライブデモを開く <span class="u">shimi-works.github.io/chord-lab</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ================= 設計思想 ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">01 — 設計思想</p>
+      <h2>「便利なツール」ではなく、<br>学習・創作の“体験”を設計する。</h2>
+      <p class="lead">機能の多さより、<b>初心者が最後まで1曲を完成させられること</b>を軸に据えています。そのための判断が、以下の原則に一貫して現れています。</p>
+
+      <div class="pill-list" style="margin-top:26px">
+        <div class="principle">
+          <div class="num">P1</div>
+          <div>
+            <h3>理論を「見える化」する</h3>
+            <p>コードを押すと構成音がピアノロール上で光る。コードの役割（トニック／サブドミナント／ドミナント）を色で示す。鍵盤図で転回形を可視化。抽象的な音楽理論を、目と耳で掴める形に翻訳しています。</p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="num">P2</div>
+          <div>
+            <h3>“完成”までの導線を用意する</h3>
+            <p>条件をクリアすると次へ進める7ステップの作曲講座。コード→ベース→ドラム→メロディ→くり返し→仕上げの順で、読み進めるだけで1曲できあがる。初回起動時は「学ぶ／作る」を選ぶ導線に振り分けます。</p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="num">P3</div>
+          <div>
+            <h3>摩擦を極限まで減らす</h3>
+            <p>インストール不要・アカウント不要・オフライン動作。単一HTMLで外部依存を最小化し、URLを開けば誰でもすぐ触れる。作品を「見てもらう」までの距離をゼロに近づけています。</p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="num">P4</div>
+          <div>
+            <h3>“おもちゃ”で終わらせない</h3>
+            <p>MIDI／WAVの書き出しで、作ったものを本物のDAW（Cubase等）や音声ファイルとして持ち出せる。学習アプリでありながら、実制作フローの入口にもなるよう設計しています。</p>
+          </div>
+        </div>
+        <div class="principle">
+          <div class="num">P5</div>
+          <div>
+            <h3>依存を増やさないことを機能と考える</h3>
+            <p>コード提案も進行解析もメロディ生成も、外部AIを使わず<b>ルールベース</b>で実装。これによりオフライン動作・鍵不要・軽量という強みを保ったまま、「かしこさ」を足しています。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= アーキテクチャ ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">02 — アーキテクチャ</p>
+      <h2>構成はシンプルに、音まわりは正確に。</h2>
+      <div class="lede-row" style="margin-top:22px">
+        <div>
+          <p class="muted">フレームワークもビルドも使わない、素のHTML/CSS/JS 1ファイル。状態は単一の <code style="font-family:var(--mono);background:var(--panel2);padding:1px 6px;border-radius:5px;border:1px solid var(--line)">S</code> オブジェクトに集約し、UIはそこから再描画する一方向の流れにしています。永続化と共有、取り消しをすべて同じスナップショット表現で扱えるのが利点です。</p>
+        </div>
+        <div>
+          <ul class="spec">
+            <li><span class="k">State</span><div class="v"><h3>単一 S オブジェクト</h3><p>コード進行・4トラックのノート・ミキサー・セクション等をまとめて保持。</p></div></li>
+            <li><span class="k">永続化</span><div class="v"><h3>localStorage</h3><p>自動保存＋名前付きマイソング。端末内に残る。</p></div></li>
+            <li><span class="k">共有</span><div class="v"><h3>URLハッシュ</h3><p>曲データを <code>#song=</code> に埋め込み、リンクだけで同じ曲を再現。</p></div></li>
+            <li><span class="k">Undo</span><div class="v"><h3>JSONスナップショット</h3><p>操作ごとの状態を32手ぶん保持し、取り消し／やり直し。</p></div></li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="eyebrow" style="margin-top:44px">オーディオ信号チェーン</p>
+      <div class="chain">
+        <div class="node accent"><div class="lbl">Source</div><div class="name">音源</div><div class="sub">GMサンプル or 合成音</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="lbl">Per-track</div><div class="name">トラックGain</div><div class="sub">ミキサー（音量/ミュート/ソロ）</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="lbl">Sum</div><div class="name">マスター</div><div class="sub">全体音量</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="lbl">Guard</div><div class="name">リミッター</div><div class="sub">Compressorで歪み防止</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="lbl">Out</div><div class="name">出力</div><div class="sub">スピーカー / WAV</div></div>
+      </div>
+      <div class="flow">
+        <span>再生：<b>先読みスケジューラ</b>（setInterval 25ms）で Web Audio の精密タイミングに予約</span>
+        <span>表示：<b>requestAnimationFrame</b> で再生ヘッドを描画</span>
+        <span>座標：レーン計算で <b>4トラックのロール</b>を縦積み・縦横ズーム対応</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 技術的ハイライト ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">03 — 技術的ハイライト</p>
+      <h2>面白かった／手応えのあった実装。</h2>
+      <div class="grid2" style="margin-top:24px">
+        <div class="card"><div class="n">AUDIO</div><h3>デュアル音源エンジン</h3><p>soundfont-player でGM音源（グランドピアノ等）の実サンプルを鳴らしつつ、読み込み失敗時はオシレーター合成音へ自動フォールバック。ネットワークに関係なく“必ず鳴る”ことを保証。</p></div>
+        <div class="card"><div class="n">EXPORT · MIDI</div><h3>SMFをバイト列で手書き</h3><p>ライブラリを使わず Standard MIDI File（format 1）を生成。可変長数値(VLQ)・テンポ／拍子メタ・楽器別トラック・ドラムのGMマッピングまで、仕様どおりのバイナリを組み立てる。</p></div>
+        <div class="card"><div class="n">EXPORT · WAV</div><h3>オフラインで一括レンダリング</h3><p>OfflineAudioContext に内蔵シンセの発音を再構成し、ミキサー設定を反映して一括レンダー。得たバッファを16bit PCMの WAVヘッダごとエンコードして書き出す。</p></div>
+        <div class="card"><div class="n">THEORY · NO-AI</div><h3>音楽理論エンジン（ルールベース）</h3><p>ダイアトニック／機能和声、定番進行の照合（回転・反復を許容）、メロディ採点、自動生成、転回形。外部AIに頼らず、依存ゼロで“かしこさ”を実装。</p></div>
+        <div class="card"><div class="n">UI · ROLL</div><h3>マルチトラック・ピアノロール</h3><p>4レーンの座標計算、<code style="font-family:var(--mono);background:var(--panel2);padding:0 5px;border-radius:4px;border:1px solid var(--line)">"midi:step"→長さ</code> の疎マップでノートを表現。範囲選択・一括リサイズ・ハサミ／のり・ペン（スマホ対応）まで自作。</p></div>
+        <div class="card"><div class="n">PORTABILITY</div><h3>単一ファイルという制約</h3><p>1つのHTMLに全部入り。外部依存はCDNのsoundfontのみで、それが無くても動く。壊れにくく・配りやすく・長持ちする構成を意図的に選択。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 理論エンジン spotlight ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">04 — スポットライト</p>
+      <h2>差別化の核＝音楽理論エンジン</h2>
+      <p class="lead">「機能はあるが何をすればいいか分からない」無料ツールが多い中で、Chord Lab は<b>作りながら理解が進む</b>ことを狙っています。その心臓部が、AIを使わないルールベースの理論エンジンです。</p>
+      <div class="grid3" style="margin-top:24px">
+        <div class="card"><div class="n">ANALYZE</div><h3>進行解析</h3><p>並べたコードが王道／カノン／小室／ツーファイブ等の定番かを判定し、機能の流れ（T→S→D）と印象を言語化。</p></div>
+        <div class="card"><div class="n">SCORE</div><h3>メロディ採点</h3><p>コードトーン率・順次/跳躍・キー適合を数値化し、改善のヒントを提示。「なぜ良い／外れるか」を可視化。</p></div>
+        <div class="card"><div class="n">GENERATE</div><h3>自動メロディ生成</h3><p>強拍にコードトーン、弱拍は順次進行——入門の定石をコード化し、進行に沿ったメロディを生成。</p></div>
+      </div>
+      <div class="callout" style="margin-top:22px">
+        <p><b>なぜルールベースか。</b> 外部AIのAPIを入れれば一見“賢く”なりますが、その瞬間に「オフラインで動く・鍵がいらない・軽い」という本アプリの強みを1つ失います。教育的な説明可能性の面でも、理論を明示的にコード化する方が筋が良いと判断しました。</p>
+        <span class="mono">trade-off = 依存性 vs. 賢さ &nbsp;→&nbsp; 自己完結を優先し、賢さは理論の明示実装で補う</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 機能マップ ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">05 — 機能マップ</p>
+      <h2>作る・学ぶ・持ち出すを一枚に。</h2>
+      <div class="fmap" style="margin-top:22px">
+        <div class="col"><h4>作る</h4><ul>
+          <li>コード進行（ダイアトニック／プリセット）</li>
+          <li>4トラック・ピアノロール</li>
+          <li>ドラムパターン貼り付け</li>
+          <li>転回形・コード提案</li>
+          <li>自動メロディ生成</li>
+        </ul></div>
+        <div class="col"><h4>整える</h4><ul>
+          <li>ミキサー（音量/ミュート/ソロ）</li>
+          <li>移調・クオンタイズ</li>
+          <li>ループ・セクションマーカー</li>
+          <li>コピー／複製・一括リサイズ</li>
+          <li>Undo / Redo（32手）</li>
+        </ul></div>
+        <div class="col"><h4>学ぶ</h4><ul>
+          <li>7ステップ作曲講座</li>
+          <li>コード練習（鍵盤図＋クイズ）</li>
+          <li>楽曲アナライザー</li>
+          <li>用語ミニ辞典</li>
+          <li>使い方リファレンス</li>
+        </ul></div>
+        <div class="col"><h4>持ち出す</h4><ul>
+          <li>MIDI 書き出し（.mid）</li>
+          <li>WAV 書き出し（.wav）</li>
+          <li>共有リンク（URL）</li>
+          <li>マイソング保存</li>
+          <li>U-FRET 読み込み</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 開発プロセス ================= -->
+  <section>
+    <div class="wrap">
+      <p class="eyebrow">06 — 開発プロセス</p>
+      <h2>“動いた”ではなく“動くと確かめた”を出す。</h2>
+      <div class="lede-row" style="margin-top:22px">
+        <div>
+          <p>単一ファイルで機能が密集するため、リグレッションが起きやすい。そこで<b>公開前に必ず2段の自動検証を通す</b>運用にしています。UIの見た目だけでなく、実際の操作をプログラムで再現して挙動を確かめてからデプロイします。</p>
+          <p class="muted">小さくコミットし、GitHub Pages へ即デプロイ。公開版で最終確認する反復サイクルで作っています。</p>
+        </div>
+        <div>
+          <ul class="spec">
+            <li><span class="k">静的検査</span><div class="v"><h3>構文・重複宣言チェック</h3><p><code>node --check</code> でパースエラーや二重宣言を検出。</p></div></li>
+            <li><span class="k">実行検証</span><div class="v"><h3>ヘッドレスブラウザ</h3><p>ランタイムエラーを捕捉し、<code>PointerEvent</code>/クリックを自動発火して機能を実測。</p></div></li>
+            <li><span class="k">デプロイ</span><div class="v"><h3>公開版で確認</h3><p>反映後、ライブURLで実際に触れて最終チェック。</p></div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= footer / axis ================= -->
+  <footer>
+    <div class="wrap">
+      <p class="eyebrow">Portfolio Axis</p>
+      <p class="axis">学習・創作を支援する<span class="hl">インタラクティブなWebアプリ</span>を、設計から実装まで。</p>
+      <p class="muted" style="max-width:60ch; margin-top:14px">音楽（Chord Lab）・読書・語彙など、題材は違っても「知識を整理して“体験”に変える」という発想は共通しています。Chord Lab はその音楽版です。</p>
+      <div class="links">
+        <a href="https://shimi-works.github.io/chord-lab/" target="_blank" rel="noopener">▸ ライブデモ</a>
+        <span class="muted">Web Audio API</span>
+        <span class="muted">Vanilla JS</span>
+        <span class="muted">Single-file HTML</span>
+        <span class="muted">GitHub Pages</span>
+      </div>
+      <p class="sig">Chord Lab — 設計・実装ドキュメント</p>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // hero: scatter a few "piano-roll notes" deterministically (no Math.random for stable render)
+  (function(){
+    var host=document.getElementById('heroNotes'); if(!host) return;
+    var notes=[
+      [8,30,120,'a'],[20,58,70,'b'],[30,44,150,'a'],[44,72,90,'b'],
+      [55,36,110,'a'],[66,64,64,'b'],[74,50,130,'a'],[85,78,80,'b'],
+      [15,86,60,'a'],[40,20,96,'b'],[60,88,74,'a'],[80,26,110,'b']
+    ];
+    var vb='var(--note-b)', va='var(--note-a)';
+    notes.forEach(function(n){
+      var el=document.createElement('i');
+      el.style.left=n[0]+'%'; el.style.top=n[1]+'%'; el.style.width=n[2]+'px';
+      el.style.background=(n[3]==='a'?va:vb);
+      el.style.opacity=(n[3]==='a'?.55:.4);
+      host.appendChild(el);
+    });
+  })();
+</script>
+
+</body>
+</html>
