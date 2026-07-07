@@ -439,6 +439,17 @@
   .insp-toggle{display:none}                 /* 通常（PC）は道具パネルの開閉ボタンを出さない */
   #inspBackdrop{display:none}
   body.kbd-hidden #kbdWrap{display:none}     /* 🎹トグルで鍵盤を隠すとロールが広がる */
+  /* 選択ノートの浮動操作バー（既定は非表示。ノート選択中だけ .on で出す） */
+  #noteBar{position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:80;
+    display:none; align-items:center; gap:7px; padding:8px 10px; border-radius:12px;
+    background:rgba(30,32,38,.96); border:1px solid var(--line2); box-shadow:0 8px 26px rgba(0,0,0,.55)}
+  #noteBar.on{display:flex}
+  #noteBar .nb-lbl{font-size:11px; color:var(--txt-dim); margin-right:2px}
+  #noteBar button{background:linear-gradient(#3c3c44,#2b2b31); border:1px solid #1a1a1e; color:var(--txt);
+    border-radius:8px; padding:9px 13px; font-size:14px; font-weight:600; cursor:pointer}
+  #noteBar button:hover{border-color:var(--accent)}
+  #noteBar button:active{transform:translateY(1px)}
+  #noteBar .nb-del:hover{border-color:var(--red); color:var(--red)}
   @media (max-width:950px), (max-height:600px){
     /* ツールバーは折り返さず1行に。横スクロールで全項目に届く（＝高さを節約） */
     #toolbar{flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px; padding:4px 8px}
@@ -840,6 +851,15 @@
 <div id="kbdWrap">
   <div id="kbd"></div>
   <div id="kbdHelp">PCキーで演奏： Z S X D C V G B H N J M = ド〜シ(低) ／ Q 2 W 3 E R 5 T 6 Y 7 U = ド〜シ(中) ／ I 9 O 0 P = ド〜ミ(高)</div>
+</div>
+
+<!-- 選択したノートを操作する浮動バー（スマホで右端ハンドルを掴めない対策） -->
+<div id="noteBar">
+  <span class="nb-lbl">選択した音</span>
+  <button id="nbShort" title="短くする">− 短く</button>
+  <button id="nbLong" title="長くする">＋ 長く</button>
+  <button id="nbDup" title="右へ複製">⧉ 複製</button>
+  <button id="nbDel" class="nb-del" title="削除">🗑 削除</button>
 </div>
 
 <!-- 高音質サンプル音源（GMサウンドフォント）。読めない場合は内蔵合成音にフォールバック -->
@@ -1338,6 +1358,12 @@ function renderTimeline(){
 function renderNotes(){
   document.querySelectorAll('.note').forEach(n=>n.remove());
   for(const tr of TRACKS) drawTrackNotes(tr, tr===S.activeTrack);
+  updateNoteBar();
+}
+/* 選択ノートの浮動バー：タッチUIでノート選択中だけ表示（クイズ画面では出さない） */
+function updateNoteBar(){
+  const bar=$('noteBar'); if(!bar) return;
+  bar.classList.toggle('on', document.body.classList.contains('touch-ui') && selNotes.size>0 && curView!=='quiz');
 }
 function drawTrackNotes(tr, active){
   const mel=S.tracks[tr];
@@ -1430,6 +1456,26 @@ function selectAllNotes(){ // Ctrl+A：アクティブトラックの全ノー�
   renderTimeline();
 }
 function toggleRecord(){ $('btnRec').click(); } // テンキー* 用
+/* 選択ノートの長さを±1グリッド伸縮（スマホの浮動バー用。指で右端ハンドルを掴めない対策） */
+function nudgeSelLen(dir){
+  if(!selNotes.size) return;
+  const mel=CM(), maxSteps=curBars*SPB(), step=Math.max(1,S.quantize||1);
+  for(const k of [...selNotes]){
+    if(!(k in mel)) continue;
+    const [m,s]=k.split(':').map(Number);
+    mel[k]=Math.max(1, Math.min(mel[k]+dir*step, maxSteps-s));
+  }
+  // 伸ばした結果、同じ行の非選択ノートに重なったら消す
+  for(const k of selNotes){ if(!(k in mel)) continue; const [m,s]=k.split(':').map(Number); const L=mel[k];
+    for(const ok in mel){ if(ok===k||selNotes.has(ok)) continue; const [om,os]=ok.split(':').map(Number);
+      if(om===m && os>s && os<s+L) delete mel[ok]; } }
+  renderTimeline(); save();
+}
+function deleteSel(){ // 選択ノートをまとめて削除（浮動バー🗑）
+  if(!selNotes.size) return;
+  const mel=CM(); for(const k of selNotes) delete mel[k];
+  selNotes.clear(); renderTimeline(); save();
+}
 
 /* ===== MIDI書き出し（Standard MIDI File / format 1） ===== */
 function downloadBlob(blob, name){
@@ -3489,6 +3535,15 @@ function applyKbd(){
 }
 $('btnKbd').addEventListener('click',()=>{ kbdShown=!kbdShown; applyKbd(); });
 applyKbd();
+
+/* ===== タッチ端末では選択ノートの浮動操作バーを使う（指で右端ハンドルを掴めない対策） ===== */
+const TOUCH_UI = matchMedia('(pointer:coarse)').matches || window.innerWidth<=950 || window.innerHeight<=600;
+document.body.classList.toggle('touch-ui', TOUCH_UI);
+$('nbShort').addEventListener('click',()=>nudgeSelLen(-1));
+$('nbLong').addEventListener('click',()=>nudgeSelLen(1));
+$('nbDup').addEventListener('click',doDuplicate);
+$('nbDel').addEventListener('click',deleteSel);
+updateNoteBar();
 </script>
 </body>
 </html>
