@@ -2548,13 +2548,18 @@ function litChord(pcs){
 /* PCキーボード演奏 */
 window.addEventListener('keydown',ev=>{
   if(ev.repeat) return;
+  // 「ようこそ」モーダル表示中は Esc で閉じるだけ。裏の操作（再生/録音/保存/編集）はさせない
+  if($('welcome').classList.contains('on')){
+    if(ev.key==='Escape'){ ev.preventDefault(); closeWelcome(); }
+    return;
+  }
   const tag=document.activeElement?.tagName;
   const onRoll=(curView==='project'||curView==='course'); // ロールを触れる画面（講座もロール編集する）
+  // 保存（Ctrl+S）— 入力欄にいてもブラウザの「ページを保存」を止めて曲を保存する
+  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='s'){ ev.preventDefault(); saveSong(); return; }
   // Ctrl+Z / Ctrl+Y（入力欄にいる時以外）
   if((ev.ctrlKey||ev.metaKey) && !ev.shiftKey && ev.key.toLowerCase()==='z' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); undo(); return; }
   if((ev.ctrlKey||ev.metaKey) && (ev.key.toLowerCase()==='y' || (ev.shiftKey && ev.key.toLowerCase()==='z')) && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); redo(); return; }
-  // 保存（Cubase: Ctrl+S）— 画面を問わず有効。ブラウザの保存ダイアログは抑制
-  if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='s' && tag!=='INPUT' && tag!=='TEXTAREA'){ ev.preventDefault(); saveSong(); return; }
   // ノートのコピー/切り取り/貼り付け/複製/全選択（Cubase準拠・ロール画面＝プロジェクト/講座）
   if((ev.ctrlKey||ev.metaKey) && onRoll && tag!=='INPUT' && tag!=='TEXTAREA'){
     const kk=ev.key.toLowerCase();
@@ -2565,6 +2570,8 @@ window.addEventListener('keydown',ev=>{
     if(kk==='a'){ ev.preventDefault(); selectAllNotes(); return; }
   }
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA') return;
+  // クイズの判定は Enter / テンキーEnter どちらでも（トランスポートより先に判定して奪われないように）
+  if(ev.key==='Enter' && quizActive() && qMode==='press'){ ev.preventDefault(); judge(); return; }
   // ===== Cubase準拠トランスポート（テンキー中心） =====
   if(ev.code==='NumpadDecimal'){ ev.preventDefault(); if(onRoll) toStart(); return; }        // テンキー. → 再生ラインを先頭へ
   if(ev.code==='NumpadEnter'){ ev.preventDefault(); if(onRoll && !playing) play(); return; }  // テンキーEnter → 再生
@@ -2572,7 +2579,6 @@ window.addEventListener('keydown',ev=>{
   if(ev.code==='NumpadDivide'){ ev.preventDefault(); if(onRoll) $('btnLoop').click(); return; } // テンキー/ → ループ(サイクル)
   if(ev.key==='Home'){ if(onRoll){ ev.preventDefault(); toStart(); } return; }                // Home → 先頭へ
   if(ev.code==='Space'){ ev.preventDefault(); if(onRoll) play(); return; }
-  if(ev.key==='Enter' && quizActive() && qMode==='press'){ judge(); return; }
   if(ev.key==='Escape' && onRoll){
     selNotes.clear(); selBlock=-1; palAssist=null; renderTimeline(); return;
   }
