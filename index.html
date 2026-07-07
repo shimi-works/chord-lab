@@ -878,7 +878,7 @@ function initAudio(){
   const comp = AC.createDynamicsCompressor(); // ピークだけ抑えるリミッター（全体は大きく）
   comp.threshold.value=-3; comp.ratio.value=12;
   try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
-  master = AC.createGain(); master.gain.value=1.0; // 全体音量（コンプで歪み防止）
+  master = AC.createGain(); master.gain.value=1.6; // 全体音量（大きめ・コンプ/リミッターで歪み防止）
   master.connect(comp); comp.connect(AC.destination);
   // トラックごとの音量ノード（合成音・サンプル音の両方がここを通る）
   TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); trackGain[tr]=g; });
@@ -1497,7 +1497,7 @@ async function exportWav(){
     const ctx=new OAC(2, Math.ceil(dur*sr), sr);
     const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-3; comp.ratio.value=12;
     try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
-    const master=ctx.createGain(); master.gain.value=1.0; master.connect(comp); comp.connect(ctx.destination);
+    const master=ctx.createGain(); master.gain.value=1.6; master.connect(comp); comp.connect(ctx.destination);
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
     chordStarts().forEach(seg=>{ if(anySolo) return;
