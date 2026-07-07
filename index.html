@@ -3123,6 +3123,9 @@ function applyQuantize(){
 $('btnQuantize').addEventListener('click',applyQuantize);
 
 /* ================= セクションマーカー（Aメロ/サビ等） ================= */
+/* HTMLエスケープ：ユーザー入力（セクション名）を innerHTML に入れる前に無害化。
+   共有リンク(#song=)経由で他人の端末にも届くため、スクリプト実行を防ぐ */
+function escHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function sectionRange(i){
   const secs=S.sections, spb=SPB(), startBar=secs[i].bar;
   let endBar=(i+1<secs.length)?secs[i+1].bar:totalBars();
@@ -3177,7 +3180,7 @@ function renderSections(){
   if(!S.sections.length){ box.innerHTML='<div class="shelf-empty">まだ目印がありません。再生ラインを置いて「ここに追加」</div>'; return; }
   S.sections.forEach((sec,i)=>{
     const row=document.createElement('div'); row.className='sec-item';
-    row.innerHTML=`<span class="sec-nm">▸ ${sec.name} <small>${sec.bar+1}小節〜</small></span>`+
+    row.innerHTML=`<span class="sec-nm">▸ ${escHtml(sec.name)} <small>${sec.bar+1}小節〜</small></span>`+
       `<span class="sec-btns"><button title="頭へジャンプ" data-a="j">▶</button>`+
       `<button title="このセクションをループ" data-a="l">🔁</button>`+
       `<button title="このセクションを直後に複製" data-a="d">⧉</button>`+
