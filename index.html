@@ -1520,7 +1520,7 @@ async function exportWav(){
     const master=ctx.createGain(); master.gain.value=1.6; master.connect(comp); comp.connect(ctx.destination);
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
-    chordStarts().forEach(seg=>{ if(anySolo) return;
+    chordStarts().forEach(seg=>{ if(anySolo || S.mixer.piano.mute) return; // ピアノMuteなら伴奏も鳴らさない
       chordMidis(seg.ch.root,seg.ch.q).forEach(m=> renderSynthVoice(ctx,tg.piano,'piano',m, seg.start*sd, sd*seg.steps*0.97, 0.3)); });
     for(const tr of TRACKS){ const cfg=S.mixer[tr]; if(cfg.mute||(anySolo&&!cfg.solo)) continue;
       const mel=S.tracks[tr];
@@ -2097,10 +2097,17 @@ function placeChordOnRoll(root,q,ev){
   let rootMidi=hit.midi-((((hit.midi-root)%12)+12)%12);
   while(rootMidi+maxIv>TOP_MIDI) rootMidi-=12;
   while(rootMidi<BOT_MIDI) rootMidi+=12;
-  ivs.forEach(iv=>{ const m=rootMidi+iv; if(m>=BOT_MIDI&&m<=TOP_MIDI) mel[m+':'+step]=len; });
+  // 転回で span が広く（第2転回は16半音）ロール音域(2オクターブ)に収まらない root(A/B♭/B等)がある。
+  // 収まる時は転回形のまま、収まらない時は各音をオクターブで折り込んで“音を欠けさせない”
+  const fits=(rootMidi+maxIv<=TOP_MIDI);
+  const placed=[];
+  ivs.forEach(iv=>{ let m=rootMidi+iv;
+    if(!fits){ while(m>TOP_MIDI) m-=12; while(m<BOT_MIDI) m+=12; }
+    if(m>=BOT_MIDI && m<=TOP_MIDI && placed.indexOf(m)<0){ mel[m+':'+step]=len; placed.push(m); }
+  });
   recordRecentChord(root,q);
   selNotes.clear(); renderTimeline(); save();
-  if(AC) ivs.forEach(iv=>{ const m=rootMidi+iv; if(m>=BOT_MIDI&&m<=TOP_MIDI) playNote(m,AC.currentTime,0.6,0.4,tr); });
+  if(AC) placed.forEach(m=>playNote(m,AC.currentTime,0.6,0.4,tr));
 }
 
 /* ================= お気に入り / 最近使ったコード ================= */
@@ -2343,7 +2350,7 @@ function schedule(){
     // コード伴奏はピアノ音色。ソロ中は隠す（ソロで単独に聞ける）
     const cs = chordStartList.find(c=>c.start===st);
     // 音量はトラックの音量ノード(trackGain)が担当。ここでは一定のベロシティで鳴らす
-    if(cs && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.3,'piano'));
+    if(cs && !anySolo && !S.mixer.piano.mute) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.3,'piano'));
     if(S.metro && st%4===0) click(nextTime, st%SPB()===0);
     for(const tr of TRACKS){
       const cfg=S.mixer[tr];
@@ -3213,7 +3220,9 @@ $('btnQuantize').addEventListener('click',applyQuantize);
 function escHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function sectionRange(i){
   const secs=S.sections, spb=SPB(), startBar=secs[i].bar;
-  let endBar=(i+1<secs.length)?secs[i+1].bar:totalBars();
+  // 最後のセクションの終端は「実際の中身の末尾」まで（totalBarsは最小4小節に
+  // パディングされ、複製やループが実際より長くなってメロディとズレるため使わない）
+  let endBar=(i+1<secs.length)?secs[i+1].bar:Math.ceil(contentSteps()/spb);
   if(endBar<=startBar) endBar=startBar+1;
   return {start:startBar*spb, end:endBar*spb, lenSteps:(endBar-startBar)*spb};
 }
@@ -3230,8 +3239,24 @@ function jumpSection(i){ const step=S.sections[i].bar*SPB(); seekTo(step); $('tl
 function loopSection(i){ const {start,end}=sectionRange(i);
   S.loop.start=start; S.loop.end=end; S.loop.on=true; renderLoop(); updateLoopBtn(); seekTo(start); save(); }
 function deleteSection(i){ S.sections.splice(i,1); renderTimeline(); save(); }
+/* コードブロックを step 境界で2つに割る（境界がブロックの途中にある時だけ）。
+   セクション複製でコード列とメロディがズレないように、区間の端で切っておく */
+function splitChordAt(stepBoundary){
+  const cs=chordStarts();
+  for(let i=0;i<cs.length;i++){
+    const c=cs[i];
+    if(c.start<stepBoundary && stepBoundary<c.start+c.steps){
+      const leftBeats=(stepBoundary-c.start)/4, rightBeats=c.ch.len-leftBeats;
+      if(leftBeats>=1 && rightBeats>=1){
+        S.prog.splice(i,1,{root:c.ch.root,q:c.ch.q,len:leftBeats},{root:c.ch.root,q:c.ch.q,len:rightBeats});
+      }
+      return;
+    }
+  }
+}
 function duplicateSection(i){ // このセクションを丸ごと直後に複製（サビをもう一回 等）
   const {start,end,lenSteps}=sectionRange(i);
+  splitChordAt(start); splitChordAt(end); // 区間の端をまたぐコードを先に分割
   for(const tr of TRACKS){
     const mel=S.tracks[tr], nm={};
     for(const k in mel){ const [m,s]=k.split(':').map(Number); nm[m+':'+(s>=end?s+lenSteps:s)]=mel[k]; } // end以降を右へ
