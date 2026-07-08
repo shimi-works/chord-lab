@@ -44,6 +44,11 @@
   .tb-btn:hover{background:linear-gradient(#46464f,#33333a)}
   .tb-btn.on{background:linear-gradient(#1f6fd8,#155bb8); border-color:#0d3f85; color:#fff;
     box-shadow:0 0 8px rgba(74,158,255,.5)}
+  /* 道具アイコン（SVG） */
+  .tb-btn.tool-ic{padding:4px 8px; line-height:0}
+  .tb-btn.tool-ic svg{width:17px; height:17px; display:block;
+    fill:currentColor; stroke:currentColor; stroke-width:1.4; stroke-linejoin:round; stroke-linecap:round}
+  .tb-btn.tool-ic svg [fill="none"], .tb-btn.tool-ic svg circle, .tb-btn.tool-ic svg rect, .tb-btn.tool-ic svg path[d^="M6.9 5.8"], .tb-btn.tool-ic svg path[d^="M3 18"], .tb-btn.tool-ic svg path[d^="M11.2 5"]{fill:none}
   /* 道具モード中のロールのカーソル */
   body.tool-cut #rollBody, body.tool-cut #rollBody *{cursor:crosshair}
   body.tool-glue #rollBody, body.tool-glue #rollBody *{cursor:cell}
@@ -191,9 +196,10 @@
   .row-key.drumkey{background:#33272a; color:#ff9a9a; font-size:8px; justify-content:center; padding-right:0}
   .row-key.kdown{filter:brightness(.8)}
   .row-cells{position:relative; flex:1; border-bottom:1px solid rgba(0,0,0,.45); /* 行の区切りをはっきり */
+    /* 縦線の階層（Cubase風）：太く明るい線=小節 ＞ 中間の線=拍 ＞ かすかな線=16分 */
     background-image:
-      repeating-linear-gradient(90deg, var(--line2) 0 1px, transparent 1px var(--barw)),
-      repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px calc(var(--cw)*4)),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.30) 0 2px, transparent 2px var(--barw)),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.12) 0 1px, transparent 1px calc(var(--cw)*4)),
       repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px var(--cw));
   }
   /* 黒鍵の行はしっかり暗く＝白鍵/黒鍵の縞で行が追いやすい */
@@ -457,6 +463,8 @@
   #chordPop .chp-row+.chp-row{margin-top:6px}
   #chordPop select{min-width:64px}
   #chordPop .sm-btn{padding:5px 9px}
+  .chord-block.rest{background:rgba(255,255,255,.05); border:1px dashed #5a5a66; color:var(--txt-dim); font-weight:400}
+  .chord-block.rest.sel{background:rgba(255,176,84,.25); border-color:#a85c1e; color:var(--txt)}
   #dropMark{position:absolute; top:0; bottom:0; width:3px; background:var(--green);
     box-shadow:0 0 6px rgba(57,217,138,.9); z-index:8; pointer-events:none; display:none}
 
@@ -540,6 +548,7 @@
     <select id="popBass" title="分数コードのベース音"></select>
     <button class="sm-btn" id="popLenM" title="1拍短く">−</button>
     <button class="sm-btn" id="popLenP" title="1拍長く">＋</button>
+    <button class="sm-btn" id="popRest" title="右どなりに空白（コード無し区間）を挿入">␣挿入</button>
     <button class="sm-btn danger" id="popDel" title="このコードを削除">🗑</button>
     <button class="sm-btn" id="popClose" title="閉じる">✕</button>
   </div>
@@ -603,11 +612,16 @@
   </div>
   <div class="tb-group">
     <span class="tb-lbl">道具</span>
-    <button class="tb-btn on" id="toolSel" data-tool="normal" title="ふつう（選択・移動・配置）">🖐</button>
-    <button class="tb-btn" id="toolPen" data-tool="pen" title="ペン：タップで音符を置く／音符をタップで消す（スマホ・タブレット向け）">✏️</button>
-    <button class="tb-btn" id="toolErase" data-tool="erase" title="消しゴム：タップで音符を消す／なぞって連続消し（スマホ向け）">🧹</button>
-    <button class="tb-btn" id="toolCut" data-tool="cut" title="ハサミ：音符をクリックした所で切る">✂️</button>
-    <button class="tb-btn" id="toolGlue" data-tool="glue" title="のり：音符をクリックで右どなりの音とつなげて長くする">🔗</button>
+    <button class="tb-btn tool-ic on" id="toolSel" data-tool="normal" title="選択（移動・配置・範囲選択）">
+      <svg viewBox="0 0 20 20"><path d="M5 2 L5 15.5 L8.6 12.2 L10.8 17.4 L13.3 16.3 L11.1 11.2 L15.8 10.8 Z"/></svg></button>
+    <button class="tb-btn tool-ic" id="toolPen" data-tool="pen" title="ペン：タップで音符を置く／音符をタップで消す（スマホ向き）">
+      <svg viewBox="0 0 20 20"><path d="M12.8 3.4 L16.6 7.2 L7.5 16.3 L3 17 L3.7 12.5 Z"/><path d="M11.2 5 L15 8.8" fill="none"/></svg></button>
+    <button class="tb-btn tool-ic" id="toolErase" data-tool="erase" title="消しゴム：タップで音符を消す／なぞって連続消し">
+      <svg viewBox="0 0 20 20"><path d="M8.2 16 L3.6 11.4 A1.6 1.6 0 0 1 3.6 9.1 L9.8 2.9 A1.6 1.6 0 0 1 12.1 2.9 L17 7.8 A1.6 1.6 0 0 1 17 10.1 L11.1 16 Z"/><path d="M6.9 5.8 L14.1 13" fill="none"/><path d="M3 18 L17.5 18" fill="none" stroke-width="2"/></svg></button>
+    <button class="tb-btn tool-ic" id="toolCut" data-tool="cut" title="ハサミ：音符をクリックした所で切る">
+      <svg viewBox="0 0 20 20" fill="none"><circle cx="5.2" cy="14.8" r="2.4"/><circle cx="14.8" cy="14.8" r="2.4"/><path d="M6.9 12.9 L14 3.2 M13.1 12.9 L6 3.2"/></svg></button>
+    <button class="tb-btn tool-ic" id="toolGlue" data-tool="glue" title="のり：音符をクリックで右どなりの音とつなげて長くする">
+      <svg viewBox="0 0 20 20" fill="none"><rect x="2.6" y="8" width="7" height="4.4" rx="1.4"/><rect x="10.4" y="8" width="7" height="4.4" rx="1.4"/><path d="M8 10.2 L12 10.2" stroke-width="2.2"/></svg></button>
   </div>
   <div class="tabs">
     <button class="tab on" id="tabProject">🎼 プロジェクト</button>
@@ -692,6 +706,9 @@
         <div class="insp-row" style="align-items:center">
           <select id="addBass" style="flex:1" title="分数コードのベース音（任意）"></select>
           <button class="sm-btn" id="btnAddChord" style="flex:1" title="この組み合わせのコードを進行の最後に追加">追加</button>
+        </div>
+        <div class="insp-row">
+          <button class="sm-btn" id="btnAddRest" title="コードの無い区間（前奏・間奏など）を進行の最後に追加">␣ 空白（コード無し）を追加</button>
         </div>
         <div class="hint-txt">全12ルート×全種類＋<b>分数コード</b>（例: C/G, F/A）を作って追加。キー外のコードもここから。</div>
         <div class="hint-txt" style="margin-top:10px">🔊 <b>コードを鳴らす/目印の切替と音量</b>は、<b>コードレーンの左端</b>（🔊ボタン＋スライダー）にあります。既定は<b>“目印だけ”で無音</b>です。</div>
@@ -798,6 +815,11 @@
         </div>
         <div class="insp-row">
           <button class="sm-btn" id="btnDupNotes" title="選択ノートをすぐ右に複製 (Ctrl+D)。連打で繰り返しが作れます">⧉ 右へ複製</button>
+        </div>
+        <div class="insp-row" style="align-items:center">
+          <select id="moveTrackSel" style="flex:1.4" title="移動/コピー先のトラック"></select>
+          <button class="sm-btn" id="btnMoveNotes" style="flex:1" title="選択ノート（未選択なら今のトラック全部）を選んだトラックへ移動">移動</button>
+          <button class="sm-btn" id="btnCopyToTrack" style="flex:1" title="選択ノート（未選択なら全部）を選んだトラックへコピー">コピー</button>
         </div>
         <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>貼り付け(Ctrl+V)は再生ライン（⏮や ルーラーで動かした位置）に入ります</b>。<b>右へ複製(Ctrl+D)</b>は繰り返しに便利。</div>
       </div>
@@ -1260,7 +1282,8 @@ function applySnapshot(d){
     ? { play:!!d.chord.play, vol:(typeof d.chord.vol==='number')?d.chord.vol:0.6 }
     : { play:true, vol:0.6 };
   S.prog=(d.prog||[]).map(c=>({root:c.root,q:c.q,len:c.len||4,
-    ...(typeof c.bass==='number'?{bass:c.bass}:{})})); // 分数コードのベース音（あれば）
+    ...(typeof c.bass==='number'?{bass:c.bass}:{}),
+    ...(c.rest?{rest:true}:{})})); // 分数ベース・空白（無コード）ブロックも引き継ぐ
   S.tracks={piano:{},piano2:{},guitar:{},guitar2:{},bass:{},drums:{}};
   if(d.tracks){ for(const tr of TRACKS) if(d.tracks[tr]) S.tracks[tr]=d.tracks[tr]; }
   else if(Array.isArray(d.melody)){ d.melody.forEach(k=>S.tracks.piano[k]=1); }
@@ -1465,10 +1488,10 @@ function renderTimeline(){
   chordStartList.forEach((cs,i)=>{
     const ch=cs.ch;
     const el=document.createElement('div');
-    el.className='chord-block'+(i===selBlock?' sel':'');
+    el.className='chord-block'+(i===selBlock?' sel':'')+(ch.rest?' rest':'');
     el.style.left=(cs.start*CW+1)+'px'; el.style.width=(cs.steps*CW-4)+'px';
-    const deg = dia.find(d=>d.root===ch.root&&d.q===ch.q);
-    el.innerHTML = `${chordName(ch.root,ch.q,ch.bass)}${deg?`<span class="deg">${deg.roman}</span>`:''}<div class="cb-handle" title="ドラッグで長さ変更"></div>`;
+    const deg = ch.rest? null : dia.find(d=>d.root===ch.root&&d.q===ch.q);
+    el.innerHTML = `${ch.rest?'（空白）':chordName(ch.root,ch.q,ch.bass)}${deg?`<span class="deg">${deg.roman}</span>`:''}<div class="cb-handle" title="ドラッグで長さ変更"></div>`;
     el.addEventListener('pointerdown',ev=>{
       if(ev.button!==0) return;
       if(ev.target.classList.contains('cb-handle')){
@@ -1486,10 +1509,11 @@ function renderTimeline(){
   // コード編集セレクタを選択中ブロックに同期（未選択なら無効化）
   { const er=$('editRoot'), eq=$('editQual'), has=(selBlock>=0 && !!S.prog[selBlock]);
     if(er&&eq){ er.disabled=!has; eq.disabled=!has;
-      if(has){ er.value=S.prog[selBlock].root; eq.value=S.prog[selBlock].q;
-        const eb=$('editBass'); if(eb) eb.value=(typeof S.prog[selBlock].bass==='number')?S.prog[selBlock].bass:''; } } }
+      if(has){ const c0=S.prog[selBlock];
+        er.value=c0.rest?0:c0.root; eq.value=c0.rest?'':c0.q;
+        const eb=$('editBass'); if(eb) eb.value=(typeof c0.bass==='number')?c0.bass:''; } } }
   // コードアシスト: 選択またはパレットタップしたコードの構成音の行を赤くハイライト
-  const acChord = palAssist || (selBlock>=0 ? {root:S.prog[selBlock].root,q:S.prog[selBlock].q} : null);
+  const acChord = palAssist || (selBlock>=0 && !S.prog[selBlock].rest ? {root:S.prog[selBlock].root,q:S.prog[selBlock].q} : null);
   const assistPcs = acChord ? new Set(CHORD[acChord.q].iv.map(iv=>(acChord.root+iv)%12)) : null;
   const scp = scalePcs(); // 現在のキー/スケールの音
   rollRows.forEach(r=>{
@@ -1615,6 +1639,20 @@ function selectAllNotes(){ // Ctrl+A：アクティブトラックの全ノー�
   renderTimeline();
 }
 function toggleRecord(){ $('btnRec').click(); } // テンキー* 用
+/* 選択ノート（未選択なら今のトラック全部）を別トラックへ移動/コピー
+   例：ピアノで作ったフレーズをピアノ2やギターへそのまま持っていく */
+function moveNotesToTrack(dest, copy){
+  const src=S.activeTrack, st=$('clipStatus');
+  if(!TRACKS.includes(dest) || dest===src){ if(st) st.textContent='移動先に別のトラックを選んでね'; return; }
+  const mel=S.tracks[src];
+  const keys=selNotes.size ? [...selNotes].filter(k=>k in mel) : Object.keys(mel);
+  if(!keys.length){ if(st) st.textContent='移動する音がありません（ノートを選ぶか、音のあるトラックで）'; return; }
+  keys.forEach(k=>{ S.tracks[dest][k]=mel[k]; if(!copy) delete mel[k]; });
+  S.activeTrack=dest; const el=$('instSel'); if(el) el.value=dest;
+  selNotes=new Set(keys); // 移動先で選択状態を維持（続けて動かせる）
+  renderTimeline(); save();
+  if(st) st.textContent=keys.length+'個のノートを'+(TRACK_LABEL[src]||src)+'→'+(TRACK_LABEL[dest]||dest)+'へ'+(copy?'コピー':'移動')+'しました';
+}
 /* 選択ノートの長さを±1グリッド伸縮（スマホの浮動バー用。指で右端ハンドルを掴めない対策） */
 function nudgeSelLen(dir){
   if(!selNotes.size) return;
@@ -1682,7 +1720,8 @@ function exportMidi(){
   const cs=chordStarts();
   if(cs.length){
     const ch=6, ev=[{t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb('Chords'))]},{t:0,d:[0xC0|ch,0]}];
-    cs.forEach(c=>{ const st=c.start*stepTicks, du=Math.max(1,c.steps*stepTicks);
+    cs.forEach(c=>{ if(c.ch.rest) return; // 空白は書き出さない
+      const st=c.start*stepTicks, du=Math.max(1,c.steps*stepTicks);
       chordMidis(c.ch.root,c.ch.q,48).forEach(n=>{
         ev.push({t:st,o:1,d:[0x90|ch,n,70]}); ev.push({t:st+du,o:0,d:[0x80|ch,n,64]}); });
       if((c.ch.bass??null)!==null){ const bn=slashBassMidi(c.ch.bass); // 分数コードのベース音
@@ -1745,7 +1784,7 @@ async function exportWav(){
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
     const cg=ctx.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); // 伴奏専用チャンネル（再生と同じ独立音量）
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
-    chordStarts().forEach(seg=>{ if(!S.chord.play) return; // 伴奏OFF（既定=目印だけ）なら書き出さない。ソロの影響は受けない（再生と同じ）
+    chordStarts().forEach(seg=>{ if(!S.chord.play || seg.ch.rest) return; // 伴奏OFF（既定=目印だけ）なら書き出さない。ソロの影響は受けない（再生と同じ）
       chordMidis(seg.ch.root,seg.ch.q).forEach(m=> renderSynthVoice(ctx,cg,'piano',m, seg.start*sd, sd*seg.steps*0.97, 0.5));
       if((seg.ch.bass??null)!==null) renderSynthVoice(ctx,cg,'piano',slashBassMidi(seg.ch.bass), seg.start*sd, sd*seg.steps*0.97, 0.55); });
     for(const tr of TRACKS){ const cfg=S.mixer[tr]; if(cfg.mute||(anySolo&&!cfg.solo)) continue;
@@ -1777,9 +1816,9 @@ function renderSuggest(){
   const box=$('suggestBox'); if(!box) return;
   const dia=diatonic();
   let target=null, targetIdx=-1;
-  if(selBlock>=0 && S.prog[selBlock]){ target=S.prog[selBlock]; targetIdx=selBlock; }
+  if(selBlock>=0 && S.prog[selBlock] && !S.prog[selBlock].rest){ target=S.prog[selBlock]; targetIdx=selBlock; }
   else if(palAssist){ target=palAssist; }
-  else if(S.prog.length){ target=S.prog[S.prog.length-1]; targetIdx=S.prog.length-1; }
+  else { for(let i=S.prog.length-1;i>=0;i--){ if(!S.prog[i].rest){ target=S.prog[i]; targetIdx=i; break; } } } // 末尾の空白は飛ばして最後のコードを対象に
   let html='';
   if(!target){
     html='<div class="hint-txt" style="margin-top:0">コードを選ぶと代理・次の一手を提案します。下は今のキーで使えるコード：</div>';
@@ -1834,9 +1873,12 @@ function generateMelody(){
   // その位置のコードトーン（音域内）／コードルート（音域内）
   const segAt=(step)=> cs.find(c=>step>=c.start&&step<c.start+c.steps)||cs[cs.length-1];
   const chordListAt=(step)=>{ const seg=segAt(step);
+    if(!seg || seg.ch.rest) return []; // 空白区間はメロディも休む
     const pcs=new Set(CHORD[seg.ch.q].iv.map(iv=>(seg.ch.root+iv)%12));
     return scaleMidis.filter(m=>pcs.has(((m%12)+12)%12)); };
-  const rootsAt=(step)=>{ const pc=((segAt(step).ch.root%12)+12)%12;
+  const rootsAt=(step)=>{ const seg=segAt(step);
+    if(!seg || seg.ch.rest) return [];
+    const pc=((seg.ch.root%12)+12)%12;
     return scaleMidis.filter(m=>((m%12)+12)%12===pc); };
 
   const mel = (tr==='bass')
@@ -2000,7 +2042,7 @@ function cyclicRepeatMatch(deg,s){
   return false;
 }
 function analyzeProgression(){
-  const prog=S.prog; if(!prog.length) return {empty:true};
+  const prog=S.prog.filter(c=>!c.rest); if(!prog.length) return {empty:true}; // 空白(無コード)は解析対象外
   const dia=diatonic();
   const degs=prog.map(c=>degIndexOf(c.root,c.q));
   const romans=prog.map((c,i)=> degs[i]>=0 ? {t:dia[degs[i]].roman, out:false} : {t:chordName(c.root,c.q), out:true});
@@ -2028,7 +2070,7 @@ function analyzeMelody(track){
   let chordEval=0, chordHit=0;
   if(cs.length) notes.forEach(n=>{
     const c=cs.find(x=>n.s>=x.start && n.s<x.start+x.steps);
-    if(c){ chordEval++; const pcs=new Set(CHORD[c.ch.q].iv.map(iv=>(c.ch.root+iv)%12)); if(pcs.has(((n.m%12)+12)%12)) chordHit++; }
+    if(c && !c.ch.rest){ chordEval++; const pcs=new Set(CHORD[c.ch.q].iv.map(iv=>(c.ch.root+iv)%12)); if(pcs.has(((n.m%12)+12)%12)) chordHit++; }
   });
   let stepN=0, leapN=0;
   for(let i=1;i<notes.length;i++){ if(notes[i].s===notes[i-1].s) continue; const d=Math.abs(notes[i].m-notes[i-1].m); if(d===0) continue; if(d<=2) stepN++; else leapN++; }
@@ -2362,7 +2404,7 @@ window.addEventListener('pointermove',ev=>{
     bDrag.moved=true; hideChordPop();
     const c=S.prog[bDrag.i];
     const g=document.createElement('div'); g.className='pal-ghost';
-    g.textContent=chordName(c.root,c.q,c.bass);
+    g.textContent=c.rest?'（空白）':chordName(c.root,c.q,c.bass);
     document.body.appendChild(g); bDrag.ghost=g;
   }
   bDrag.ghost.style.left=(ev.clientX+12)+'px';
@@ -2378,7 +2420,7 @@ window.addEventListener('pointerup',ev=>{
   const ch=S.prog[d.i]; if(!ch) return;
   if(!d.moved){ // クリック＝選択＋試聴＋編集ポップアップ
     palAssist=null; selBlock=d.i; renderTimeline();
-    playChordNow(ch.root,ch.q,0.9,ch.bass);
+    if(!ch.rest) playChordNow(ch.root,ch.q,0.9,ch.bass);
     showChordPop(ev.clientX);
     return;
   }
@@ -2387,7 +2429,7 @@ window.addEventListener('pointerup',ev=>{
     moveChordTo(d.i, dropIndexAt(ev.clientX)); save();
   }else{ // ロール上で離した＝その和音を音符として配置
     const rb=$('rollBody').getBoundingClientRect();
-    if(ev.clientY>=rb.top && ev.clientY<=rb.bottom) placeChordOnRoll(ch.root,ch.q,ev,ch.bass);
+    if(ev.clientY>=rb.top && ev.clientY<=rb.bottom && !ch.rest) placeChordOnRoll(ch.root,ch.q,ev,ch.bass);
   }
 });
 function dropIndexAt(clientX){ // コードレーン上のX→挿入位置（ブロックの中心で前後判定）
@@ -2417,7 +2459,7 @@ function hideDropMark(){ const m=$('dropMark'); if(m) m.style.display='none'; }
 function showChordPop(clientX){
   const pop=$('chordPop'); if(!pop || selBlock<0 || !S.prog[selBlock]) return;
   const c=S.prog[selBlock];
-  $('popRoot').value=c.root; $('popQual').value=c.q;
+  $('popRoot').value=c.rest?0:c.root; $('popQual').value=c.rest?'':c.q;
   $('popBass').value=(typeof c.bass==='number')?c.bass:'';
   pop.style.display='block';
   const lane=$('chordLaneWrap').getBoundingClientRect();
@@ -2786,7 +2828,7 @@ function schedule(){
     // 音量はトラックの音量ノード(trackGain)が担当。ここでは一定のベロシティで鳴らす
     // コード伴奏：既定OFF（目印だけ）。「コードも鳴らす」ONの時だけ、専用音量で鳴らす
     // コード伴奏はソロの影響を受けない“ガイド”扱い（ソロ中に消えて「鳴らなくなった」と見える問題の対策）
-    if(cs && S.chord.play){ // 音量は専用チャンネル(trackGain.chord)が担当
+    if(cs && S.chord.play && !cs.ch.rest){ // 空白(無コード)は鳴らさない。音量は専用チャンネル(trackGain.chord)が担当
       chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.5,'chord'));
       if((cs.ch.bass??null)!==null) playNote(slashBassMidi(cs.ch.bass),nextTime,stepDur()*cs.steps*0.97,0.55,'chord'); // 分数のベース音
     }
@@ -3397,6 +3439,7 @@ function renderHowto(){
         <li><b>6つのトラック</b>… 🎹ピアノ×2 / 🎸ギター×2 / 🎸ベース / 🥁ドラム。ピアノ・ギターは2レーンずつあるので、<b>1本目=コード弾き・2本目=リフやメロディ</b>のように使い分けられます（各レーンの左に楽器名）</li>
         <li>いちばん下の<b>鍵盤</b>… クリックで音が鳴る（PCキーの Z列・Q列でも演奏可）</li>
         <li>左の<b>インスペクタ</b>… パレット・保存・ミキサーなどの道具箱</li>
+        <li><b>ロールの縦線</b>… <b>太く明るい線＝小節の区切り</b>／中間の線＝拍（1拍ごと）／かすかな線＝16分音符のマス目です</li>
       </ul></div>
 
     <div class="ht-sec"><h3>▶ 再生・停止</h3>
@@ -3416,6 +3459,7 @@ function renderHowto(){
         <li><b>Ctrl+C</b>＝コピー ／ <b>Ctrl+V</b>＝<b>再生ラインの位置</b>に貼り付け（ルーラーで位置を決めてから⌘V）</li>
         <li><b>Ctrl+D＝右へ複製</b>（イチオシ）。連打すると、そのフレーズが右へどんどんくり返せます。「2小節を4回」なども一瞬</li>
         <li>ボタン派は左パネル「<b>✂ 選択ノートの編集</b>」からでもOK</li>
+        <li><b>別トラックへ移動/コピー</b>＝同じ枠の「→ ピアノ2」などを選んで<b>移動/コピー</b>。ピアノで作ったフレーズをピアノ2やギターへそのまま持っていけます（未選択なら今のトラック全部）</li>
       </ul></div>
 
     <div class="ht-sec"><h3>🛠 道具（ふつう / ペン / 消しゴム / ハサミ / のり）</h3>
@@ -3433,6 +3477,7 @@ function renderHowto(){
         <li><b>転回形</b>（パレット下のセレクタ）＝ロールへ和音を置くときの積み方（基本形／第1／第2転回）を選べる</li>
         <li><b>選択中のコード（編集）</b>＝置いたブロックをクリックして選び、<b>ルート／種類をその場で差し替え</b>。移動・長さ・削除も</li>
         <li><b>🔊/🔇（コードレーンの左端）</b>＝コードを<b>鳴らすか“目印だけ”か</b>の切替＋音量。<b>既定は無音の目印</b>です</li>
+        <li><b>␣ 空白（コード無し）</b>＝前奏・間奏などコードが無い区間を作れます（自由コード枠の「空白を追加」／ブロックのポップアップ「␣挿入」）</li>
         <li><b>ドラムパターン</b>＝8ビートなどを丸ごと貼り付け</li>
       </ul></div>
 
@@ -3676,6 +3721,7 @@ function initControls(){
   const ebo=$('editBass'); fillRoots(ebo,true);
   const editSelChord=()=>{ if(selBlock<0||!S.prog[selBlock]) return;
     const c=S.prog[selBlock];
+    delete c.rest; // 空白でコードを選んだら変換
     c.root=+ero.value; c.q=eqo.value;
     if(ebo.value==='') delete c.bass; else c.bass=+ebo.value;
     recordRecentChord(c.root,c.q);
@@ -3687,6 +3733,7 @@ function initControls(){
   const pbo=$('popBass'); fillRoots(pbo,true);
   const popApply=()=>{ if(selBlock<0||!S.prog[selBlock]) return;
     const c=S.prog[selBlock];
+    delete c.rest; // 空白ブロックでコードを選んだら、そのコードに変換
     c.root=+pro.value; c.q=pqo.value;
     if(pbo.value==='') delete c.bass; else c.bass=+pbo.value;
     recordRecentChord(c.root,c.q);
@@ -3694,6 +3741,10 @@ function initControls(){
   [pro,pqo,pbo].forEach(s=>s.addEventListener('change',popApply));
   $('popLenM').addEventListener('click',()=>changeBlockLen(-1));
   $('popLenP').addEventListener('click',()=>changeBlockLen(1));
+  $('popRest').addEventListener('click',()=>{ // 右どなりに空白（前奏・間奏などコードの無い区間）
+    if(selBlock<0) return;
+    S.prog.splice(selBlock+1,0,{rest:true,len:newChordLen()});
+    selBlock=selBlock+1; renderTimeline(); save(); });
   $('popDel').addEventListener('click',()=>{ hideChordPop();
     if(selBlock>=0){ S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save(); } });
   $('popClose').addEventListener('click',hideChordPop);
@@ -3707,6 +3758,10 @@ function initControls(){
     if(abo.value!=='') c.bass=+abo.value;
     S.prog.push(c); selBlock=S.prog.length-1; palAssist=null;
     recordRecentChord(root,q); renderTimeline(); save(); playChordNow(root,q,0.9,c.bass);
+  });
+  $('btnAddRest').addEventListener('click',()=>{ // 空白＝伴奏も目印も無い区間
+    S.prog.push({rest:true,len:newChordLen()});
+    selBlock=S.prog.length-1; palAssist=null; renderTimeline(); save();
   });
   // コード伴奏（既定OFF＝目印だけ）。目立つトグルボタンで切り替え
   updateChordBtn(); $('chordVol').value=Math.round(S.chord.vol*100);
@@ -3817,7 +3872,7 @@ function splitChordAt(stepBoundary){
     if(c.start<stepBoundary && stepBoundary<c.start+c.steps){
       const leftBeats=(stepBoundary-c.start)/4, rightBeats=c.ch.len-leftBeats;
       if(leftBeats>=1 && rightBeats>=1){
-        const bs=(typeof c.ch.bass==='number')?{bass:c.ch.bass}:{};
+        const bs={...(typeof c.ch.bass==='number'?{bass:c.ch.bass}:{}), ...(c.ch.rest?{rest:true}:{})};
         S.prog.splice(i,1,{root:c.ch.root,q:c.ch.q,len:leftBeats,...bs},{root:c.ch.root,q:c.ch.q,len:rightBeats,...bs});
       }
       return;
@@ -3837,7 +3892,8 @@ function duplicateSection(i){ // このセクションを丸ごと直後に複�
   starts.forEach((c,idx)=>{ if(c.start>=start && c.start<end) inSec.push(idx); });
   if(inSec.length){
     const copies=inSec.map(idx=>({root:S.prog[idx].root,q:S.prog[idx].q,len:S.prog[idx].len,
-      ...(typeof S.prog[idx].bass==='number'?{bass:S.prog[idx].bass}:{})}));
+      ...(typeof S.prog[idx].bass==='number'?{bass:S.prog[idx].bass}:{}),
+      ...(S.prog[idx].rest?{rest:true}:{})}));
     S.prog.splice(inSec[inSec.length-1]+1,0,...copies);
   }
   const barsAdded=lenSteps/SPB();
@@ -4012,6 +4068,12 @@ $('btnGenMelody').addEventListener('click',generateMelody);
 $('btnAddSec').addEventListener('click',()=>addSection());
 $('secName').addEventListener('keydown',e=>{ if(e.key==='Enter') addSection(); });
 document.querySelectorAll('[data-sec]').forEach(b=>b.addEventListener('click',()=>addSection(b.dataset.sec)));
+// トラック間の移動/コピー：移動先セレクタを構築
+{ const ms=$('moveTrackSel');
+  TRACKS.forEach(tr=>{ const o=document.createElement('option'); o.value=tr; o.textContent='→ '+TRACK_LABEL[tr]; ms.appendChild(o); });
+  ms.value='piano2';
+  $('btnMoveNotes').addEventListener('click',()=>moveNotesToTrack(ms.value,false));
+  $('btnCopyToTrack').addEventListener('click',()=>moveNotesToTrack(ms.value,true)); }
 $('btnCopyNotes').addEventListener('click',copySel);
 $('btnPasteNotes').addEventListener('click',doPaste);
 $('btnDupNotes').addEventListener('click',doDuplicate);
