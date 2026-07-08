@@ -1452,6 +1452,7 @@ function drawTrackNotes(tr, active){
    クリック=ノート配置 / 空きドラッグ=矩形範囲選択 / ノートをドラッグ=まとめて移動
    ノート右端ハンドル=長さ変更 / 選択して Delete=まとめて削除 */
 const DRAG_TH=4; // これ以上動いたらドラッグ開始とみなす(px)
+let lastNoteLen=0; // 直前にリサイズした音の長さ（次に置く音へ引き継ぐ。0=未設定→グリッド幅）
 /* ===== 道具（ハサミ＝切る / のり＝つなぐ）===== */
 let rollTool='normal';
 function setTool(tool){
@@ -2096,16 +2097,21 @@ $('rollBody').addEventListener('pointerdown',ev=>{
   }
   grab(ev);
 });
-/* Alt配置：グリッドに合わせてノートを1つ置く */
+/* Alt配置：グリッドに合わせてノートを1つ置く。
+   長さは「直前にリサイズした音の長さ」を引き継ぐ（未設定ならグリッド幅）＝DAW流 */
 function placeAt(hit){
   const q=S.quantize||1;
   const qstep=Math.floor(hit.step/q)*q;
-  const key=hit.midi+':'+qstep;
   const mel=CM();
-  if(!(key in mel)){
-    mel[key]=q; initAudio(); playNote(hit.midi,AC.currentTime,0.18,0.35);
-    selNotes=new Set([key]); renderNotes();
-  }
+  if(findNoteAt(hit.midi,qstep)) return;                 // 既に音がある場所には置かない
+  const maxSteps=curBars*SPB();
+  const len=Math.max(1, Math.min(lastNoteLen||q, maxSteps-qstep));
+  // 新しい音に呑み込まれる同じ行の音は消す（リサイズと同じ整合ルール）
+  for(const k in mel){ const [m,s]=k.split(':').map(Number);
+    if(m===hit.midi && s>qstep && s<qstep+len) delete mel[k]; }
+  const key=hit.midi+':'+qstep;
+  mel[key]=len; initAudio(); playNote(hit.midi,AC.currentTime,0.18,0.35);
+  selNotes=new Set([key]); renderNotes();
 }
 
 $('rollBody').addEventListener('pointermove',ev=>{
@@ -2211,6 +2217,10 @@ window.addEventListener('pointerup',ev=>{
   if(d.mode==='noop'){ return; } // Shift選択は確定済み
   if(d.mode==='empty-down'){ selNotes.clear(); renderTimeline(); return; } // 空きクリック＝全選択解除
   if(d.mode==='note-down'){ renderTimeline(); return; } // ノートのクリック＝単体選択（既に確定）
+  if(d.mode==='resize'){ // リサイズ確定：この長さを記憶して、次に置く音へ引き継ぐ
+    const k=d.midi+':'+d.start, mel=CM();
+    if(k in mel) lastNoteLen=mel[k];
+  }
   renderTimeline(); save(); // move / resize / select 確定
 });
 
@@ -3149,7 +3159,7 @@ function renderHowto(){
 
     <div class="ht-sec ht-key"><h3>✏️ 音の置き方（いちばん大事）</h3>
       <ul>
-        <li><b>Altキーを押しながらクリック</b>… その場所に音符を置く（押しながらドラッグで連続配置）</li>
+        <li><b>Altキーを押しながらクリック</b>… その場所に音符を置く（押しながらドラッグで連続配置）。<b>置く長さは直前にリサイズした音の長さを引き継ぎます</b>（クオンタイズを変えるとリセット）</li>
         <li>置いた音を<b>クリック</b>＝選択 ／ <b>Shift+クリック</b>で複数選択 ／ 空きを<b>ドラッグ</b>で囲って範囲選択</li>
         <li>選択した音を<b>ドラッグ</b>＝移動 ／ 音の<b>右端をドラッグ</b>＝長さ変更 ／ <b>Delete</b>＝削除</li>
         <li><b>Ctrl+Z</b>＝一手戻す（↶ボタンでも。32手ぶん）／ <b>Ctrl+Y</b>＝やり直し</li>
@@ -3429,7 +3439,7 @@ function initControls(){
   ks.addEventListener('change',()=>{ tt.value=S.keyRoot; }); // キー変更に追従
   // クオンタイズ
   $('quantSel').value=S.quantize;
-  $('quantSel').addEventListener('change',e=>{ S.quantize=+e.target.value; save(); });
+  $('quantSel').addEventListener('change',e=>{ S.quantize=+e.target.value; lastNoteLen=0; save(); }); // グリッド変更＝引き継ぎ長さをリセット
   // 楽器（音色）
   $('instSel').value=S.activeTrack;
   $('instSel').addEventListener('change',e=>{
