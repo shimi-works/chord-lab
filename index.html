@@ -978,6 +978,8 @@ function initAudio(){
   master.connect(comp); comp.connect(AC.destination);
   // トラックごとの音量ノード（合成音・サンプル音の両方がここを通る）
   TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); trackGain[tr]=g; });
+  // コード伴奏の専用チャンネル（ピアノのフェーダー/Muteに影響されない独立音量）
+  { const cg=AC.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); trackGain.chord=cg; }
   loadSoundfonts(); // 高音質サンプルの読み込み開始（非同期・失敗しても合成音で鳴る）
 }
 function trackOut(inst){ return (trackGain[inst]||master); }
@@ -989,7 +991,8 @@ const INST={
 };
 /* ===== 高音質サンプル（soundfont-player / GM音源）===== */
 let SF={}, sfLoaded=false;
-const SF_MAP={piano:'acoustic_grand_piano', guitar:'acoustic_guitar_steel', bass:'electric_bass_finger'};
+const SF_MAP={piano:'acoustic_grand_piano', guitar:'acoustic_guitar_steel', bass:'electric_bass_finger',
+  chord:'acoustic_grand_piano'}; // コード伴奏用（ピアノと同じ音色・専用チャンネルへ出力）
 function loadSoundfonts(retries){
   retries=retries||0;
   if(sfLoaded || !AC) return;
@@ -1033,19 +1036,25 @@ function playNote(midi, when, dur, vel=0.4, inst){
 }
 /* ===== ドラムキット =====
    ロールの行(midi)に打楽器を割り当てる。上＝シンバル/ハット、下＝キックの並び。
-   キック60・スネア70・ハット79は従来の位置を維持（既存の曲・パターンの互換）。
-   midiがキット定義の中間に来た場合は drumFor() が最も近い打楽器を返す。 */
+   基本3点（キック60・スネア70・閉ハット79）は従来の行のまま。旧3分割時代に
+   その他の行へ置かれた音はタム等に変わることがある（各行にラベルを表示して明示）。
+   中間の行は drumFor() が最も近い打楽器（同距離なら基本3点を優先）を返す。 */
 const DRUM_KIT=[
-  {midi:60, lbl:'キック',   name:'キック（バスドラム）',   gm:36, kind:'kick'},
+  {midi:60, lbl:'キック',   name:'キック（バスドラム）',   gm:36, kind:'kick',  core:true},
   {midi:66, lbl:'床タム',   name:'フロアタム',             gm:43, kind:'tom', f0:120, f1:60},
-  {midi:70, lbl:'スネア',   name:'スネア',                 gm:38, kind:'snare'},
+  {midi:70, lbl:'スネア',   name:'スネア',                 gm:38, kind:'snare', core:true},
   {midi:73, lbl:'低タム',   name:'ロータム',               gm:47, kind:'tom', f0:180, f1:95},
   {midi:76, lbl:'高タム',   name:'ハイタム',               gm:50, kind:'tom', f0:250, f1:140},
-  {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'noise', dur:0.045, hp:7000, g:0.5},
+  {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'noise', dur:0.045, hp:7000, g:0.5, core:true},
   {midi:82, lbl:'開ハット', name:'オープンハイハット',     gm:46, kind:'noise', dur:0.30,  hp:6500, g:0.42},
   {midi:84, lbl:'シンバル', name:'クラッシュシンバル',     gm:49, kind:'noise', dur:0.70,  hp:3500, g:0.5},
 ];
-function drumFor(midi){ let best=DRUM_KIT[0], bd=Infinity; for(const p of DRUM_KIT){ const d=Math.abs(midi-p.midi); if(d<bd){ bd=d; best=p; } } return best; }
+function drumFor(midi){
+  let best=DRUM_KIT[0], bd=Infinity;
+  for(const p of DRUM_KIT){ const d=Math.abs(midi-p.midi);
+    if(d<bd || (d===bd && p.core && !best.core)){ bd=d; best=p; } } // 同距離なら基本3点を優先（旧データ互換）
+  return best;
+}
 function noiseBuf(ctx,dur){ const b=ctx.createBuffer(1, Math.max(1,Math.ceil(ctx.sampleRate*dur)), ctx.sampleRate);
   const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
 /* 1つの打楽器を発音（ライブ再生とWAVオフラインで共通。ctx/destだけ差し替える） */
@@ -1184,7 +1193,10 @@ function applySnapshot(d){
   S.activeTrack=d.activeTrack||d.instrument||'piano';
   S.loop=d.loop&&d.loop.end>d.loop.start ? d.loop : {on:false,start:0,end:0};
   S.sections=Array.isArray(d.sections)? d.sections.map(s=>({name:s.name||'',bar:s.bar|0})) : [];
-  S.chord={ play:!!(d.chord&&d.chord.play), vol:(d.chord&&typeof d.chord.vol==='number')?d.chord.vol:0.6 };
+  // コード伴奏：chordフィールドが無い＝この機能より前のデータ。当時は常に鳴っていたので互換で play:true
+  S.chord = d.chord
+    ? { play:!!d.chord.play, vol:(typeof d.chord.vol==='number')?d.chord.vol:0.6 }
+    : { play:true, vol:0.6 };
   S.prog=(d.prog||[]).map(c=>({root:c.root,q:c.q,len:c.len||4}));
   S.tracks={piano:{},guitar:{},bass:{},drums:{}};
   if(d.tracks){ for(const tr of TRACKS) if(d.tracks[tr]) S.tracks[tr]=d.tracks[tr]; }
@@ -1238,6 +1250,7 @@ function refreshControlsFromState(){
   $('quantSel').value=S.quantize; $('instSel').value=S.activeTrack;
   if($('trTarget')) $('trTarget').value=S.keyRoot;
   if($('btnChordPlay')){ updateChordBtn(); $('chordVol').value=Math.round(S.chord.vol*100); }
+  if(trackGain.chord) trackGain.chord.gain.value=S.chord.vol; // 曲読込/undo後もチャンネル音量を同期
   renderMixer();
 }
 /* コード伴奏トグルの見た目を状態に同期 */
@@ -1646,9 +1659,10 @@ async function exportWav(){
     try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
     const master=ctx.createGain(); master.gain.value=1.6; master.connect(comp); comp.connect(ctx.destination);
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
+    const cg=ctx.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); // 伴奏専用チャンネル（再生と同じ独立音量）
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
     chordStarts().forEach(seg=>{ if(anySolo || !S.chord.play) return; // 伴奏OFF（既定=目印だけ）なら書き出さない
-      chordMidis(seg.ch.root,seg.ch.q).forEach(m=> renderSynthVoice(ctx,tg.piano,'piano',m, seg.start*sd, sd*seg.steps*0.97, 0.5*S.chord.vol)); });
+      chordMidis(seg.ch.root,seg.ch.q).forEach(m=> renderSynthVoice(ctx,cg,'piano',m, seg.start*sd, sd*seg.steps*0.97, 0.5)); });
     for(const tr of TRACKS){ const cfg=S.mixer[tr]; if(cfg.mute||(anySolo&&!cfg.solo)) continue;
       const mel=S.tracks[tr];
       for(const key in mel){ const [midi,ms]=key.split(':').map(Number); const when=ms*sd, d=sd*mel[key]*0.95;
@@ -2581,7 +2595,7 @@ function schedule(){
     const cs = chordStartList.find(c=>c.start===st);
     // 音量はトラックの音量ノード(trackGain)が担当。ここでは一定のベロシティで鳴らす
     // コード伴奏：既定OFF（目印だけ）。「コードも鳴らす」ONの時だけ、専用音量で鳴らす
-    if(cs && S.chord.play && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.5*S.chord.vol,'piano'));
+    if(cs && S.chord.play && !anySolo) chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.5,'chord')); // 音量は専用チャンネル(trackGain.chord)が担当
     if(S.metro && st%4===0) click(nextTime, st%SPB()===0);
     for(const tr of TRACKS){
       const cfg=S.mixer[tr];
@@ -3106,7 +3120,9 @@ $('learnModeSeg').addEventListener('click',ev=>{
 });
 
 /* ================= タブ / 設定 ================= */
+let chordPlayBeforeCourse=null; // 講座で自動ONにする前の値（退出時に復元。講座中に手動で切り替えたら尊重）
 function setView(v){
+  const prevView=curView;
   curView=v;
   const proj=(v==='project'||v==='course'); // 講座もロールを使うのでプロジェクト画面を表示
   $('projectView').classList.toggle('on',proj);
@@ -3123,9 +3139,16 @@ function setView(v){
   if(v==='howto'){ stop(); renderHowto(); }
   if(v==='course'){
     // 講座中はコード伴奏を自動ON（既定の“目印だけ”のままだと、初心者がSTEP2で▶を押しても無音になるため）
-    if(!S.chord.play){ S.chord.play=true; updateChordBtn(); }
+    if(prevView!=='course'){ chordPlayBeforeCourse=S.chord.play;
+      if(!S.chord.play){ S.chord.play=true; updateChordBtn(); } }
     renderCourse(); startCourseTick();
-  } else { stopCourseTick(); }
+  } else {
+    stopCourseTick();
+    // 講座を出たら伴奏設定を元に戻す（講座中に手動で切り替えていたらそのまま）
+    if(prevView==='course' && chordPlayBeforeCourse!==null){
+      S.chord.play=chordPlayBeforeCourse; chordPlayBeforeCourse=null; updateChordBtn();
+    }
+  }
 }
 $('tabProject').addEventListener('click',()=>setView('project'));
 $('tabHowto').addEventListener('click',()=>setView('howto'));
@@ -3223,6 +3246,7 @@ function renderHowto(){
         <li><b>2本指でピンチ</b>＝ロールをズーム＆移動（画面が小さくても全体を見渡せます）</li>
         <li>道具の <b>✏️ペン</b>＝タップで音符を置く、<b>🧹消しゴム</b>＝タップ／なぞって消す</li>
         <li><b>1本指でドラッグ</b>＝範囲選択（囲った音符をまとめて選択）。選んで <b>🧹</b> や削除でまとめて消せます</li>
+        <li><b>ループ範囲</b>＝スマホでは <b>🔁</b> を押して全体ループ→ルーラー両端の <b>‹ ›</b> ハンドルをドラッグして範囲をせばめる（PCは Shift＋ドラッグでも可）</li>
       </ul></div>
 
     <div class="ht-sec"><h3>💾 見やすさ・保存・共有・書き出し</h3>
@@ -3252,6 +3276,7 @@ function renderHowto(){
     <div class="ht-sec"><h3>🆘 困ったとき</h3>
       <ul>
         <li><b>音が鳴らない</b>… 画面を一度クリックしてから再生（ブラウザの仕様で最初のクリックが必要）。ミキサーのミュート/ソロも確認</li>
+        <li><b>コードだけ鳴らない</b>… コードは既定で“目印だけ”（無音）。<b>コードレーン左端の 🔇 を押して 🔊</b> にすると鳴ります</li>
         <li><b>音が置けない</b>… <b>Alt＋クリック</b>で置きます。道具が🖐ふつうになっているか確認</li>
         <li><b>全体が見えない</b>… 「拡大縮小」の<b>縦−</b>で圧縮。横はShift+ホイール</li>
         <li><b>やらかした</b>… <b>Ctrl+Z</b>で戻せます（32手）</li>
@@ -3316,7 +3341,7 @@ const COURSE=[
 
   { title:'STEP 4 ― ドラムでリズム（ノリ）を作る', track:'drums',
     body:`<h4>🥁 ドラムの役割</h4>
-      <p>ドラムは<b>リズム＝ノリ</b>を作る心臓部。音程はなく、<b>叩く場所（高さ）</b>で音が変わります。このアプリはドラムのレーンを3段に分けています：</p>
+      <p>ドラムは<b>リズム＝ノリ</b>を作る心臓部。音程はなく、<b>叩く場所（行）</b>で楽器が変わります：</p>
       <p>各行に楽器名が出ます。基本の3つは <b>キック</b>（ドンッ、低い）・<b>スネア</b>（タンッ）・<b>ハット</b>（チッチッ、細かい）。ほかに<b>タム・シンバル・開ハット</b>も使えます（上＝シンバル/ハット、下＝キック）。</p>
       <h4>🎵 いちばん使われる「8ビート」</h4>
       <p>J-POPの<b>約8割</b>が8ビートと言われる基本のリズム。作り方はシンプル：</p>
@@ -3435,9 +3460,12 @@ function initControls(){
   ero.addEventListener('change',editSelChord); eqo.addEventListener('change',editSelChord);
   // コード伴奏（既定OFF＝目印だけ）。目立つトグルボタンで切り替え
   updateChordBtn(); $('chordVol').value=Math.round(S.chord.vol*100);
-  $('btnChordPlay').addEventListener('click',()=>{ S.chord.play=!S.chord.play; updateChordBtn(); save();
+  $('btnChordPlay').addEventListener('click',()=>{ S.chord.play=!S.chord.play; updateChordBtn();
+    chordPlayBeforeCourse=null; // 手動で切り替えた＝本人の意思。講座退出時の自動復元はしない
+    save();
     if(S.chord.play && S.prog.length) playChordNow(S.prog[0].root,S.prog[0].q); }); // ONにしたら一度試聴
-  $('chordVol').addEventListener('input',e=>{ S.chord.vol=(+e.target.value)/100; save(); });
+  $('chordVol').addEventListener('input',e=>{ S.chord.vol=(+e.target.value)/100;
+    if(trackGain.chord) trackGain.chord.gain.value=S.chord.vol; save(); });
   $('scaleType').value=S.scaleType;
   $('bpm').value=S.bpm;
   $('seventh').checked=S.seventh;
