@@ -247,7 +247,7 @@
   .sec-btns button{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:4px; padding:3px 6px; font-size:12px; cursor:pointer}
   .sec-btns button:hover{border-color:var(--accent)}
   /* ループ範囲（ルーラー上） */
-  #rulerCells{cursor:pointer}
+  #rulerCells{cursor:ew-resize}
   .loop-region{position:absolute; top:0; height:100%; background:rgba(74,158,255,.28);
     border-left:2px solid var(--accent); border-right:2px solid var(--accent);
     pointer-events:none; opacity:.35}
@@ -275,6 +275,9 @@
   .song-del:hover{background:rgba(255,92,92,.22)}
   #playhead{position:absolute; top:0; bottom:0; width:1px; background:#fff;
     box-shadow:0 0 6px rgba(255,255,255,.8); z-index:40; pointer-events:none; display:none}
+  /* 再生位置バーの頭（つまみ）：ルーラーをドラッグで移動できることを示す */
+  #playhead::before{content:''; position:absolute; top:0; left:-5px; width:11px; height:9px;
+    background:#fff; clip-path:polygon(0 0,100% 0,50% 100%); box-shadow:0 0 4px rgba(255,255,255,.7)}
 
   /* ---------- quiz ---------- */
   #quizView,#howtoView{align-items:flex-start; justify-content:center; overflow-y:auto; background:#212126}
@@ -524,7 +527,7 @@
     <button class="tb-btn" id="btnStop" title="停止 (先頭へ)">■</button>
     <button class="tb-btn" id="btnPlay" title="再生/停止 (Space)。停止すると再生を始めた地点に戻ります">▶</button>
     <button class="tb-btn" id="btnRec" title="録音：ONにして弾くと、再生位置にノートが記録されます（テンキー ＊）">⏺</button>
-    <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーをドラッグで範囲指定／テンキー ／）">🔁</button>
+    <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーを Shift＋ドラッグで範囲指定／テンキー ／）">🔁</button>
     <button class="tb-btn" id="btnKbd" title="下の鍵盤を表示/非表示（ロールを広く使う）">🎹</button>
     <div id="pos">1.1</div>
   </div>
@@ -2598,14 +2601,26 @@ function rulerBar(ev){
   const bar=Math.floor((ev.clientX-rect.left)/CW/SPB());
   return Math.max(0, Math.min(curBars-1, bar));
 }
+/* ルーラー上のstep位置（再生位置バーのスクラブ用・16分単位） */
+function rulerStep(ev){
+  const rect=$('rulerCells').getBoundingClientRect();
+  const step=Math.round((ev.clientX-rect.left)/CW);
+  return Math.max(0, Math.min(curBars*SPB(), step));
+}
 $('rulerCells').addEventListener('pointerdown',ev=>{
   // ループ範囲の端ハンドル → 伸縮
   if(ev.target.classList.contains('loop-h')){
     loopEdge=ev.target.classList.contains('l')?'l':'r';
     return;
   }
-  const bar=rulerBar(ev);
-  rulerDrag={startBar:bar, endBar:bar, moved:false};
+  if(ev.shiftKey){ // Shift+ドラッグ＝ループ範囲を作る
+    const bar=rulerBar(ev);
+    rulerDrag={mode:'loop', startBar:bar, endBar:bar, moved:false};
+  }else{ // 通常ドラッグ＝再生位置バーを動かす（スクラブ）
+    rulerDrag={mode:'scrub'};
+    seekTo(rulerStep(ev));
+    try{ $('rulerCells').setPointerCapture(ev.pointerId); }catch(e){}
+  }
 });
 /* ループ端ハンドルのドラッグで始点/終点を伸縮（最小1小節） */
 window.addEventListener('pointermove',ev=>{
@@ -2618,6 +2633,7 @@ window.addEventListener('pointermove',ev=>{
 window.addEventListener('pointerup',()=>{ if(loopEdge){ loopEdge=null; save(); } });
 window.addEventListener('pointermove',ev=>{
   if(!rulerDrag) return;
+  if(rulerDrag.mode==='scrub'){ seekTo(rulerStep(ev)); return; } // 再生位置バーを移動
   const bar=rulerBar(ev);
   if(bar!==rulerDrag.endBar || rulerDrag.moved){
     rulerDrag.endBar=bar; rulerDrag.moved=true;
@@ -2629,8 +2645,8 @@ window.addEventListener('pointermove',ev=>{
 });
 window.addEventListener('pointerup',()=>{
   if(!rulerDrag) return;
-  if(!rulerDrag.moved) seekTo(rulerDrag.startBar*SPB()); // クリック＝シーク
-  else save();
+  if(rulerDrag.mode==='loop'){ if(!rulerDrag.moved) seekTo(rulerDrag.startBar*SPB()); else save(); }
+  // scrub は seekTo 済みなので後処理不要
   rulerDrag=null;
 });
 
@@ -3039,7 +3055,7 @@ function renderHowto(){
       </ul></div>
 
     <div class="ht-sec"><h3>▶ 再生・停止</h3>
-      <p>上のバーの <b>▶</b>（またはキーボードの <b>Space</b>）で再生／一時停止。<b>⏮</b>で先頭に戻る、<b>■</b>で停止、<b>🔁</b>でループ再生（ルーラーをドラッグで範囲指定）、<b>⏺</b>は録音（ONにして弾くと再生位置に音が記録されます）。テンポは「<b>TEMPO</b>」の数字、拍子は「拍子」で変えられます。</p></div>
+      <p>上のバーの <b>▶</b>（またはキーボードの <b>Space</b>）で再生／停止（停止すると<b>再生を始めた地点</b>に戻ります）。<b>⏮</b>で先頭に戻る、<b>■</b>で曲の先頭へ、<b>⏺</b>は録音。<b>上のルーラー（小節番号の帯）を左右にドラッグすると、再生位置のバーを自由に動かせます</b>（<b>Shift＋ドラッグ</b>でループ範囲の指定）。テンポは「<b>TEMPO</b>」の数字、拍子は「拍子」で変えられます。</p></div>
 
     <div class="ht-sec ht-key"><h3>✏️ 音の置き方（いちばん大事）</h3>
       <ul>
@@ -3547,6 +3563,7 @@ initControls();
 renderPalette();
 renderTimeline();
 updateLoopBtn();
+seekTo(0); // 再生位置バーを先頭に表示（ルーラーをドラッグで移動できる）
 renderStats();
 renderExplain();
 renderMixer();
