@@ -190,14 +190,16 @@
   .row-key.black{background:#2a2a30; color:#777}
   .row-key.drumkey{background:#33272a; color:#ff9a9a; font-size:8px; justify-content:center; padding-right:0}
   .row-key.kdown{filter:brightness(.8)}
-  .row-cells{position:relative; flex:1; border-bottom:1px solid rgba(0,0,0,.2);
+  .row-cells{position:relative; flex:1; border-bottom:1px solid rgba(0,0,0,.45); /* 行の区切りをはっきり */
     background-image:
       repeating-linear-gradient(90deg, var(--line2) 0 1px, transparent 1px var(--barw)),
       repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px calc(var(--cw)*4)),
       repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 1px, transparent 1px var(--cw));
   }
-  .roll-row.blackrow .row-cells{background-color:rgba(0,0,0,.22)}
-  .roll-row.crow .row-cells{box-shadow:inset 0 -1px 0 rgba(255,255,255,.12)}
+  /* 黒鍵の行はしっかり暗く＝白鍵/黒鍵の縞で行が追いやすい */
+  .roll-row.blackrow .row-cells{background-color:rgba(0,0,0,.34)}
+  /* C（オクターブ境界）の行の下に明るいライン＝「ここがドの段」と一目で分かる */
+  .roll-row.crow .row-cells{box-shadow:inset 0 -2px 0 rgba(255,214,121,.35)}
   .note{
     position:absolute; top:1px; height:calc(var(--rowh) - 3px); width:calc(var(--cw) - 2px);
     background:linear-gradient(#6fb2ff,#3f8cff); border:1px solid #1d5cb0; border-radius:3px;
@@ -246,7 +248,7 @@
   .sec-quick{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px}
   .sec-quick .sm-btn{flex:none; padding:4px 8px; font-size:11px}
   .sec-item{display:flex; align-items:center; justify-content:space-between; gap:6px; padding:5px 2px; border-bottom:1px solid var(--line)}
-  .sec-nm{font-size:13px; color:var(--txt)} .sec-nm small{color:var(--txt-dim); font-size:11px; margin-left:4px}
+  .sec-nm{font-size:13px; color:var(--txt); cursor:pointer} .sec-nm:hover{color:var(--accent)} .sec-nm small{color:var(--txt-dim); font-size:11px; margin-left:4px}
   .sec-btns{display:flex; gap:3px; flex:none}
   .sec-btns button{background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:4px; padding:3px 6px; font-size:12px; cursor:pointer}
   .sec-btns button:hover{border-color:var(--accent)}
@@ -448,6 +450,15 @@
   .wl-opt.primary .wl-d{color:#cfe0ff}
   .wl-skip{margin-top:16px; background:none; border:none; color:var(--txt-dim); font-size:12.5px; cursor:pointer; text-decoration:underline}
   .wl-skip:hover{color:var(--txt)}
+  /* コード編集ポップアップ＆並べ替えマーカー */
+  #chordPop{position:fixed; display:none; z-index:220; background:var(--panel); border:1px solid var(--accent);
+    border-radius:9px; padding:8px; box-shadow:0 10px 30px rgba(0,0,0,.55)}
+  #chordPop .chp-row{display:flex; gap:5px; align-items:center}
+  #chordPop .chp-row+.chp-row{margin-top:6px}
+  #chordPop select{min-width:64px}
+  #chordPop .sm-btn{padding:5px 9px}
+  #dropMark{position:absolute; top:0; bottom:0; width:3px; background:var(--green);
+    box-shadow:0 0 6px rgba(57,217,138,.9); z-index:8; pointer-events:none; display:none}
 
   /* ===== スマホ・短い画面（横向き含む）：GarageBand風に上部を圧縮＋道具パネルをドロワー化 =====
      縦の短い画面ではツールバー＋鍵盤が高さを食い、ピアノロールが隠れてしまうため */
@@ -516,6 +527,21 @@
       </button>
     </div>
     <button class="wl-skip" id="wlSkip">スキップして始める</button>
+  </div>
+</div>
+
+<!-- コードブロックの編集ポップアップ（ブロックをクリックで表示） -->
+<div id="chordPop">
+  <div class="chp-row">
+    <select id="popRoot" title="ルート"></select>
+    <select id="popQual" title="種類（メジャー/マイナー/7th等）"></select>
+  </div>
+  <div class="chp-row">
+    <select id="popBass" title="分数コードのベース音"></select>
+    <button class="sm-btn" id="popLenM" title="1拍短く">−</button>
+    <button class="sm-btn" id="popLenP" title="1拍長く">＋</button>
+    <button class="sm-btn danger" id="popDel" title="このコードを削除">🗑</button>
+    <button class="sm-btn" id="popClose" title="閉じる">✕</button>
   </div>
 </div>
 
@@ -762,7 +788,7 @@
           <button class="sm-btn" id="btnLenPlus">＋ 長く</button>
         </div>
         <div class="hint-txt" id="blockLenLabel">長さ: --</div>
-        <div class="hint-txt">コードレーンのブロックを<b>クリックで選択</b>→<b>ルート／種類／分数ベース</b>をその場で差し替え（例: C→Cm、C→C7、C→C/G）。移動・長さ変更・削除もここで。右端ドラッグでも長さ変更（1〜16拍）。</div>
+        <div class="hint-txt">ブロックは<b>クリック＝その場に編集ポップアップ</b>（ルート/種類/分数/長さ/削除）／<b>横にドラッグ＝並べ替え</b>／<b>下のロールへドラッグ＝和音を音符として配置</b>。ここ（左パネル）でも同じ編集ができます。右端ドラッグ=長さ（1〜16拍）。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">✂ 選択ノートの編集（コピー）</div>
@@ -773,7 +799,7 @@
         <div class="insp-row">
           <button class="sm-btn" id="btnDupNotes" title="選択ノートをすぐ右に複製 (Ctrl+D)。連打で繰り返しが作れます">⧉ 右へ複製</button>
         </div>
-        <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>右へ複製</b>は2小節を繰り返す等に便利（<b>Ctrl+C / V / D</b>）。</div>
+        <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>貼り付け(Ctrl+V)は再生ライン（⏮や ルーラーで動かした位置）に入ります</b>。<b>右へ複製(Ctrl+D)</b>は繰り返しに便利。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">移調（キー一括変更）</div>
@@ -1129,10 +1155,12 @@ function chordMidis(root,q,base=48){
 }
 /* 分数コードのベース音（0-11）を、コード土台(48)の1オクターブ下の実音にする */
 const slashBassMidi=(bass)=>36+((bass%12)+12)%12;
+/* コードの試聴。'chord'チャンネル経由＝ピアノのフェーダー/Muteを下げても鳴る
+   （以前は'piano'経由で、ピアノ音量0にするとコードのタップ試聴まで無音になった） */
 function playChordNow(root,q,dur=0.9,bass){
   initAudio();
-  chordMidis(root,q).forEach(m=>playNote(m,AC.currentTime,dur,0.3,'piano')); // コードはピアノ固定
-  if((bass??null)!==null) playNote(slashBassMidi(bass),AC.currentTime,dur,0.35,'piano'); // 分数のベース音
+  chordMidis(root,q).forEach(m=>playNote(m,AC.currentTime,dur,0.3,'chord'));
+  if((bass??null)!==null) playNote(slashBassMidi(bass),AC.currentTime,dur,0.35,'chord'); // 分数のベース音
 }
 function click(when,accent){
   const o=AC.createOscillator(), g=AC.createGain();
@@ -1263,13 +1291,21 @@ function fmtDate(t){
   const d=new Date(t), p=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+let lastSavedName=null; // このセッションで最後に保存した曲名（同名の連続保存は確認なしで上書き）
 function saveSong(){
-  const inp=$('songName'); let name=(inp.value||'').trim()||'無題の曲';
+  const inp=$('songName'); let name=(inp.value||'').trim();
+  if(!name){ // 名前が空なら、その場で入力してもらう（「無題の曲」だらけになるのを防ぐ）
+    name=(window.prompt('曲名を入力してください','マイソング')||'').trim();
+    if(!name){ const st=$('songStatus'); if(st) st.textContent='保存をキャンセルしました（曲名が未入力）'; return; }
+  }
   const list=loadSongs(); const ex=list.find(s=>s.name===name);
-  if(ex){ if(!confirm(`「${name}」は既にあります。上書きしますか？`)) return; ex.data=snapshot(); ex.date=Date.now(); }
+  if(ex){
+    if(name!==lastSavedName && !confirm(`「${name}」は既にあります。上書きしますか？`)) return;
+    ex.data=snapshot(); ex.date=Date.now();
+  }
   else list.unshift({id:'s'+Date.now(), name, date:Date.now(), data:snapshot()});
-  storeSongs(list); inp.value=''; renderSongList();
-  const st=$('songStatus'); if(st) st.textContent=`✅「${name}」を保存しました`;
+  storeSongs(list); inp.value=name; lastSavedName=name; renderSongList();
+  const st=$('songStatus'); if(st) st.textContent=`✅「${name}」を保存しました（Ctrl+Sで上書き）`;
 }
 function autoBackup(){ // 開く前に現在の作業を退避
   const has=S.prog.length>0 || TRACKS.some(tr=>Object.keys(S.tracks[tr]).length>0);
@@ -1434,19 +1470,19 @@ function renderTimeline(){
     const deg = dia.find(d=>d.root===ch.root&&d.q===ch.q);
     el.innerHTML = `${chordName(ch.root,ch.q,ch.bass)}${deg?`<span class="deg">${deg.roman}</span>`:''}<div class="cb-handle" title="ドラッグで長さ変更"></div>`;
     el.addEventListener('pointerdown',ev=>{
+      if(ev.button!==0) return;
       if(ev.target.classList.contains('cb-handle')){
         blockResize={i, start:cs.start};
         selBlock=i; renderTimeline();
+        return;
       }
+      chordBlockDown(ev,i,el); // クリック=選択+編集ポップアップ／横ドラッグ=並べ替え／下へドラッグ=ロールに配置
     });
-    el.addEventListener('click',ev=>{
-      if(ev.target.classList.contains('cb-handle')) return;
-      palAssist=null; selBlock=i; renderTimeline(); playChordNow(ch.root,ch.q,0.9,ch.bass);
-    });
-    el.addEventListener('dblclick',()=>{ S.prog.splice(i,1); selBlock=-1; renderTimeline(); save(); });
+    el.addEventListener('dblclick',()=>{ hideChordPop(); S.prog.splice(i,1); selBlock=-1; renderTimeline(); save(); });
     cc.appendChild(el);
   });
   $('blockLenLabel').textContent = selBlock>=0 ? `長さ: ${S.prog[selBlock].len}拍` : '長さ: --';
+  if(selBlock<0) hideChordPop(); // 選択が外れたら編集ポップも閉じる
   // コード編集セレクタを選択中ブロックに同期（未選択なら無効化）
   { const er=$('editRoot'), eq=$('editQual'), has=(selBlock>=0 && !!S.prog[selBlock]);
     if(er&&eq){ er.disabled=!has; eq.disabled=!has;
@@ -1473,6 +1509,13 @@ function renderTimeline(){
 function renderNotes(){
   document.querySelectorAll('.note').forEach(n=>n.remove());
   for(const tr of TRACKS) drawTrackNotes(tr, tr===S.activeTrack);
+  updateNoteBar();
+}
+/* ドラッグ中の軽量再描画：動くのはアクティブトラックだけなので、そこだけ描き直す
+   （6レーン全部を毎pointermoveで作り直すとドラッグ＋端スクロールがカクつくため） */
+function renderNotesActive(){
+  document.querySelectorAll('.note.tr-'+S.activeTrack).forEach(n=>n.remove());
+  drawTrackNotes(S.activeTrack, true);
   updateNoteBar();
 }
 /* 選択ノートの浮動バー：タッチUIでノート選択中だけ表示（クイズ画面では出さない） */
@@ -1563,8 +1606,8 @@ function pasteAt(anchorStep){
   selNotes=ns; renderTimeline(); save();
   initAudio(); return true;
 }
-function doPaste(){ if(pasteAt(pasteCursor)) pasteCursor+=clip.w; }
-function doDuplicate(){ if(copySel()) doPaste(); } // 選択→すぐ右へ。連打で繰り返しが伸びる
+function doPaste(){ pasteAt(curStep); } // 貼り付けは必ず「今の再生スタート位置（再生ライン）」へ
+function doDuplicate(){ if(copySel()){ if(pasteAt(pasteCursor)) pasteCursor+=clip.w; } } // 複製は従来どおり選択のすぐ右へ。連打で繰り返しが伸びる
 function cutSel(){ if(copySel()){ const mel=CM(); for(const k of selNotes) delete mel[k]; selNotes.clear(); renderTimeline(); save(); } } // Ctrl+X
 function selectAllNotes(){ // Ctrl+A：アクティブトラックの全ノートを選択
   selNotes=new Set(Object.keys(CM()));
@@ -1702,7 +1745,7 @@ async function exportWav(){
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
     const cg=ctx.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); // 伴奏専用チャンネル（再生と同じ独立音量）
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
-    chordStarts().forEach(seg=>{ if(anySolo || !S.chord.play) return; // 伴奏OFF（既定=目印だけ）なら書き出さない
+    chordStarts().forEach(seg=>{ if(!S.chord.play) return; // 伴奏OFF（既定=目印だけ）なら書き出さない。ソロの影響は受けない（再生と同じ）
       chordMidis(seg.ch.root,seg.ch.q).forEach(m=> renderSynthVoice(ctx,cg,'piano',m, seg.start*sd, sd*seg.steps*0.97, 0.5));
       if((seg.ch.bass??null)!==null) renderSynthVoice(ctx,cg,'piano',slashBassMidi(seg.ch.bass), seg.start*sd, sd*seg.steps*0.97, 0.55); });
     for(const tr of TRACKS){ const cfg=S.mixer[tr]; if(cfg.mute||(anySolo&&!cfg.solo)) continue;
@@ -2053,9 +2096,9 @@ function wireSuggest(box,targetIdx){
         S.prog[targetIdx].root=root; S.prog[targetIdx].q=q; delete S.prog[targetIdx].bass; // 置換したら分数指定は外す
         selBlock=targetIdx;
       }else if(act==='next' && targetIdx>=0){
-        S.prog.splice(targetIdx+1,0,{root,q,len:S.beatsPerBar}); selBlock=targetIdx+1;
+        S.prog.splice(targetIdx+1,0,{root,q,len:newChordLen()}); selBlock=targetIdx+1;
       }else{
-        S.prog.push({root,q,len:S.beatsPerBar}); selBlock=S.prog.length-1;
+        S.prog.push({root,q,len:newChordLen()}); selBlock=S.prog.length-1;
       }
       palAssist=null; recordRecentChord(root,q); renderTimeline(); save(); playChordNow(root,q);
     });
@@ -2089,11 +2132,15 @@ function noteRect(key){
   return {x:KEYW+s*CW, y, w:CM()[key]*CW, h:ROWH};
 }
 function grab(ev){ try{ $('rollBody').setPointerCapture(ev.pointerId); }catch(e){} }
-/* ドラッグがビュー端に来たら横スクロール */
+/* ドラッグがビュー端に来たら縦横スクロール（端に近いほど速く） */
 function autoScroll(ev){
-  const sc=$('tlScroll'), r=sc.getBoundingClientRect(), edge=50;
-  if(ev.clientX>r.right-edge) sc.scrollLeft+=16;
-  else if(ev.clientX<r.left+KEYW+edge) sc.scrollLeft-=16;
+  const sc=$('tlScroll'), r=sc.getBoundingClientRect(), edge=60;
+  const dR=ev.clientX-(r.right-edge), dL=(r.left+KEYW+edge)-ev.clientX;
+  if(dR>0) sc.scrollLeft+=Math.min(40, 8+dR*0.6);
+  else if(dL>0) sc.scrollLeft-=Math.min(40, 8+dL*0.6);
+  const dB=ev.clientY-(r.bottom-edge), dT=(r.top+edge)-ev.clientY;
+  if(dB>0) sc.scrollTop+=Math.min(40, 8+dB*0.6);
+  else if(dT>0) sc.scrollTop-=Math.min(40, 8+dT*0.6);
 }
 
 $('rollBody').addEventListener('pointerdown',ev=>{
@@ -2168,7 +2215,7 @@ function placeAt(hit){
     if(m===hit.midi && s>qstep && s<qstep+len) delete mel[k]; }
   const key=hit.midi+':'+qstep;
   mel[key]=len; initAudio(); playNote(hit.midi,AC.currentTime,0.18,0.35);
-  selNotes=new Set([key]); renderNotes();
+  selNotes=new Set([key]); renderNotesActive();
 }
 
 $('rollBody').addEventListener('pointermove',ev=>{
@@ -2180,7 +2227,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
 
   if(rollDrag.mode==='erase'){ // 消しゴムをなぞる：通過した音符を消す
     const k=hit.inGrid?findNoteAt(hit.midi,hit.step):null;
-    if(k && (k in CM())){ delete CM()[k]; selNotes.delete(k); renderNotes(); }
+    if(k && (k in CM())){ delete CM()[k]; selNotes.delete(k); renderNotesActive(); }
     return;
   }
 
@@ -2193,6 +2240,8 @@ $('rollBody').addEventListener('pointermove',ev=>{
     if(rollDrag.group){
       // 選択中すべてを同じ量だけ伸縮（つかんだノートの変化量 delta を全体へ）
       const delta=len-rollDrag.baseLen;
+      if(delta===rollDrag.prevDelta) return; // 同じグリッド内の移動では再計算しない（ドラッグを軽く）
+      rollDrag.prevDelta=delta;
       for(const k in rollDrag.origLens){
         const [mm,ss]=k.split(':').map(Number);
         mel[k]=Math.max(1, Math.min(rollDrag.origLens[k]+delta, maxSteps-ss));
@@ -2204,7 +2253,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
           const [om,os]=ok.split(':').map(Number);
           if(om===mm && os>ss && os<ss+L) delete mel[ok]; }
       }
-      renderNotes(); return;
+      renderNotesActive(); return;
     }
     if(mel[key]!==len){
       mel[key]=len;
@@ -2213,7 +2262,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
         const [m,s]=k.split(':').map(Number);
         if(m===rollDrag.midi && s>rollDrag.start && s<rollDrag.start+len) delete mel[k];
       }
-      renderNotes();
+      renderNotesActive();
     }
     return;
   }
@@ -2241,7 +2290,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
     dMidi=Math.max(BOT_MIDI-minM, Math.min(TOP_MIDI-maxM, dMidi));
     const nm={...rollDrag.others}, ns=new Set();
     o.forEach(n=>{ const nk=(n.m+dMidi)+':'+(n.s+dStep); nm[nk]=n.len; ns.add(nk); });
-    S.tracks[S.activeTrack]=nm; selNotes=ns; renderNotes(); autoScroll(ev);
+    S.tracks[S.activeTrack]=nm; selNotes=ns; renderNotesActive(); autoScroll(ev);
     return;
   }
 
@@ -2262,7 +2311,7 @@ $('rollBody').addEventListener('pointermove',ev=>{
       const r=noteRect(k);
       if(r.x<rx+rw && r.x+r.w>rx && r.y<ry+rh && r.y+r.h>ry) sel.add(k);
     }
-    selNotes=sel; renderNotes(); autoScroll(ev);
+    selNotes=sel; renderNotesActive(); autoScroll(ev);
     return;
   }
 });
@@ -2292,7 +2341,94 @@ window.addEventListener('pointermove',ev=>{
     renderTimeline();
   }
 });
-window.addEventListener('pointerup',()=>{ if(blockResize){ blockResize=null; save(); } });
+window.addEventListener('pointerup',()=>{ if(blockResize){
+  const b=S.prog[blockResize.i]; if(b) lastChordLen=b.len; // 直前に変えた長さを記憶（次に追加するコードへ引き継ぐ）
+  blockResize=null; save(); } });
+let lastChordLen=0; // 直前に長さを変えた/±したコードの拍数。0=未設定（拍子ぶん）
+const newChordLen=()=>lastChordLen||S.beatsPerBar;
+
+/* ===== コードブロックのドラッグ＆編集ポップアップ =====
+   クリック（動かさない）＝選択＋試聴＋その場の編集ポップアップ
+   横ドラッグ（レーン内）＝並べ替え／下へドラッグ＝ピアノロールへ和音を配置 */
+let bDrag=null;
+function chordBlockDown(ev,i,el){
+  bDrag={i, x0:ev.clientX, y0:ev.clientY, moved:false, ghost:null};
+  try{ el.setPointerCapture(ev.pointerId); }catch(e){}
+}
+window.addEventListener('pointermove',ev=>{
+  if(!bDrag) return;
+  if(!bDrag.moved){
+    if(Math.abs(ev.clientX-bDrag.x0)<DRAG_TH && Math.abs(ev.clientY-bDrag.y0)<DRAG_TH) return;
+    bDrag.moved=true; hideChordPop();
+    const c=S.prog[bDrag.i];
+    const g=document.createElement('div'); g.className='pal-ghost';
+    g.textContent=chordName(c.root,c.q,c.bass);
+    document.body.appendChild(g); bDrag.ghost=g;
+  }
+  bDrag.ghost.style.left=(ev.clientX+12)+'px';
+  bDrag.ghost.style.top=(ev.clientY+8)+'px';
+  const lane=$('chordLaneWrap').getBoundingClientRect();
+  if(ev.clientY<=lane.bottom+6) showDropMark(ev.clientX); else hideDropMark(); // レーン内＝並べ替え位置を表示
+});
+window.addEventListener('pointerup',ev=>{
+  if(!bDrag) return;
+  const d=bDrag; bDrag=null;
+  if(d.ghost) d.ghost.remove();
+  hideDropMark();
+  const ch=S.prog[d.i]; if(!ch) return;
+  if(!d.moved){ // クリック＝選択＋試聴＋編集ポップアップ
+    palAssist=null; selBlock=d.i; renderTimeline();
+    playChordNow(ch.root,ch.q,0.9,ch.bass);
+    showChordPop(ev.clientX);
+    return;
+  }
+  const lane=$('chordLaneWrap').getBoundingClientRect();
+  if(ev.clientY<=lane.bottom+6){ // レーン内で離した＝並べ替え
+    moveChordTo(d.i, dropIndexAt(ev.clientX)); save();
+  }else{ // ロール上で離した＝その和音を音符として配置
+    const rb=$('rollBody').getBoundingClientRect();
+    if(ev.clientY>=rb.top && ev.clientY<=rb.bottom) placeChordOnRoll(ch.root,ch.q,ev,ch.bass);
+  }
+});
+function dropIndexAt(clientX){ // コードレーン上のX→挿入位置（ブロックの中心で前後判定）
+  const rect=$('chordCells').getBoundingClientRect();
+  const dropStep=(clientX-rect.left)/CW;
+  let idx=S.prog.length, acc=0;
+  for(let i=0;i<S.prog.length;i++){ const w=S.prog[i].len*4;
+    if(dropStep<acc+w/2){ idx=i; break; } acc+=w; }
+  return idx;
+}
+function moveChordTo(from,to){
+  if(to>from) to--;
+  if(to===from){ renderTimeline(); return; }
+  const it=S.prog.splice(from,1)[0];
+  S.prog.splice(to,0,it); selBlock=to;
+  renderTimeline();
+}
+function showDropMark(clientX){
+  let m=$('dropMark');
+  if(!m){ m=document.createElement('div'); m.id='dropMark'; $('chordCells').appendChild(m); }
+  const idx=dropIndexAt(clientX);
+  let acc=0; for(let i=0;i<idx;i++) acc+=S.prog[i].len*4;
+  m.style.left=(acc*CW)+'px'; m.style.display='block';
+}
+function hideDropMark(){ const m=$('dropMark'); if(m) m.style.display='none'; }
+/* 編集ポップアップ（コードのすぐ下に出す） */
+function showChordPop(clientX){
+  const pop=$('chordPop'); if(!pop || selBlock<0 || !S.prog[selBlock]) return;
+  const c=S.prog[selBlock];
+  $('popRoot').value=c.root; $('popQual').value=c.q;
+  $('popBass').value=(typeof c.bass==='number')?c.bass:'';
+  pop.style.display='block';
+  const lane=$('chordLaneWrap').getBoundingClientRect();
+  pop.style.top=(lane.bottom+6)+'px';
+  pop.style.left=Math.max(6, Math.min(clientX-40, window.innerWidth-pop.offsetWidth-8))+'px';
+}
+function hideChordPop(){ const pop=$('chordPop'); if(pop) pop.style.display='none'; }
+document.addEventListener('pointerdown',ev=>{ // ポップの外を触ったら閉じる
+  const pop=$('chordPop'); if(!pop || pop.style.display!=='block') return;
+  if(!ev.target.closest('#chordPop') && !ev.target.closest('.chord-block')) hideChordPop();
+},true);
 
 /* ================= パレット / インスペクター ================= */
 function renderPalette(){
@@ -2352,7 +2488,7 @@ function palUp(ev){
       if(dropStep<acc+w/2){ idx=i; break; }
       acc+=w;
     }
-    S.prog.splice(idx,0,{root:d.root,q:d.q,len:S.beatsPerBar});
+    S.prog.splice(idx,0,{root:d.root,q:d.q,len:newChordLen()});
     selBlock=idx; palAssist=null; recordRecentChord(d.root,d.q);
     renderTimeline(); save(); playChordNow(d.root,d.q);
     return;
@@ -2369,7 +2505,7 @@ function invertIvs(ivs, inv){
   return arr.sort((a,b)=>a-b);
 }
 /* パレットの和音を、ドロップ位置のトラック・高さに音符として置く */
-function placeChordOnRoll(root,q,ev){
+function placeChordOnRoll(root,q,ev,bass){
   const hit=rollHit(ev); if(!hit.inGrid) return;
   const tr=hit.track||S.activeTrack;
   if(tr!==S.activeTrack) setActiveTrack(tr);
@@ -2414,7 +2550,7 @@ function toggleFav(root,q){
 const isFav=(root,q)=>favChords.some(c=>chordKey(c.root,c.q)===chordKey(root,q));
 /* コードを進行の末尾に追加（お気に入り/最近チップのクリック） */
 function appendChord(root,q){
-  S.prog.push({root,q,len:S.beatsPerBar});
+  S.prog.push({root,q,len:newChordLen()});
   selBlock=S.prog.length-1; palAssist=null; recordRecentChord(root,q);
   renderTimeline(); save(); playChordNow(root,q);
 }
@@ -2623,6 +2759,7 @@ function changeBlockLen(delta){
   if(selBlock<0) return;
   const ch=S.prog[selBlock];
   ch.len=Math.max(1, Math.min(16, ch.len+delta));
+  lastChordLen=ch.len; // 次に追加するコードへ引き継ぐ
   renderTimeline(); save();
 }
 $('btnLenMinus').addEventListener('click',()=>changeBlockLen(-1));
@@ -2648,7 +2785,8 @@ function schedule(){
     const cs = chordStartList.find(c=>c.start===st);
     // 音量はトラックの音量ノード(trackGain)が担当。ここでは一定のベロシティで鳴らす
     // コード伴奏：既定OFF（目印だけ）。「コードも鳴らす」ONの時だけ、専用音量で鳴らす
-    if(cs && S.chord.play && !anySolo){ // 音量は専用チャンネル(trackGain.chord)が担当
+    // コード伴奏はソロの影響を受けない“ガイド”扱い（ソロ中に消えて「鳴らなくなった」と見える問題の対策）
+    if(cs && S.chord.play){ // 音量は専用チャンネル(trackGain.chord)が担当
       chordMidis(cs.ch.root,cs.ch.q).forEach(m=>playNote(m,nextTime,stepDur()*cs.steps*0.97,0.5,'chord'));
       if((cs.ch.bass??null)!==null) playNote(slashBassMidi(cs.ch.bass),nextTime,stepDur()*cs.steps*0.97,0.55,'chord'); // 分数のベース音
     }
@@ -2942,6 +3080,7 @@ window.addEventListener('keydown',ev=>{
   if(ev.key==='Home'){ if(onRoll){ ev.preventDefault(); toStart(); } return; }                // Home → 先頭へ
   if(ev.code==='Space'){ ev.preventDefault(); if(onRoll) play(); return; }
   if(ev.key==='Escape' && onRoll){
+    hideChordPop();
     selNotes.clear(); selBlock=-1; palAssist=null; renderTimeline(); return;
   }
   if((ev.key==='Delete'||ev.key==='Backspace') && onRoll){
@@ -3199,6 +3338,7 @@ $('learnModeSeg').addEventListener('click',ev=>{
 /* ================= タブ / 設定 ================= */
 let chordPlayBeforeCourse=null; // 講座で自動ONにする前の値（退出時に復元。講座中に手動で切り替えたら尊重）
 function setView(v){
+  hideChordPop();
   const prevView=curView;
   curView=v;
   const proj=(v==='project'||v==='course'); // 講座もロールを使うのでプロジェクト画面を表示
@@ -3273,7 +3413,7 @@ function renderHowto(){
     <div class="ht-sec"><h3>✂ コピー・貼り付け・複製（くり返しに超便利）</h3>
       <p>フレーズを<b>くり返す</b>のは作曲の基本テク。範囲選択してから：</p>
       <ul>
-        <li><b>Ctrl+C</b>＝コピー ／ <b>Ctrl+V</b>＝貼り付け</li>
+        <li><b>Ctrl+C</b>＝コピー ／ <b>Ctrl+V</b>＝<b>再生ラインの位置</b>に貼り付け（ルーラーで位置を決めてから⌘V）</li>
         <li><b>Ctrl+D＝右へ複製</b>（イチオシ）。連打すると、そのフレーズが右へどんどんくり返せます。「2小節を4回」なども一瞬</li>
         <li>ボタン派は左パネル「<b>✂ 選択ノートの編集</b>」からでもOK</li>
       </ul></div>
@@ -3366,7 +3506,7 @@ function renderHowto(){
         <li><b>Space</b>… 再生／停止（トグル）　<b>テンキー Enter</b>… 再生開始</li>
         <li><b>テンキー ＊</b>… 録音のON/OFF　<b>テンキー ／</b>… ループ（サイクル）のON/OFF</li>
         <li><b>Ctrl+Z / Ctrl+Y</b>… 元に戻す／やり直し</li>
-        <li><b>Ctrl+C / Ctrl+X / Ctrl+V</b>… コピー／切り取り／貼り付け　<b>Ctrl+D</b>… 複製（右へ）</li>
+        <li><b>Ctrl+C / Ctrl+X / Ctrl+V</b>… コピー／切り取り／<b>再生ラインの位置へ</b>貼り付け　<b>Ctrl+D</b>… 複製（右へ）</li>
         <li><b>Ctrl+A</b>… （編集中トラックの）全ノート選択　<b>Delete</b>… 選択を削除</li>
         <li><b>Ctrl+S</b>… マイソングに保存</li>
       </ul>
@@ -3541,13 +3681,29 @@ function initControls(){
     recordRecentChord(c.root,c.q);
     renderTimeline(); save(); playChordNow(c.root,c.q,0.9,c.bass); };
   ero.addEventListener('change',editSelChord); eqo.addEventListener('change',editSelChord); ebo.addEventListener('change',editSelChord);
+  // コードブロックの編集ポップアップ（クリックで表示）
+  const pro=$('popRoot'); fillRoots(pro,false);
+  const pqo=$('popQual'); fillQuals(pqo);
+  const pbo=$('popBass'); fillRoots(pbo,true);
+  const popApply=()=>{ if(selBlock<0||!S.prog[selBlock]) return;
+    const c=S.prog[selBlock];
+    c.root=+pro.value; c.q=pqo.value;
+    if(pbo.value==='') delete c.bass; else c.bass=+pbo.value;
+    recordRecentChord(c.root,c.q);
+    renderTimeline(); save(); playChordNow(c.root,c.q,0.9,c.bass); };
+  [pro,pqo,pbo].forEach(s=>s.addEventListener('change',popApply));
+  $('popLenM').addEventListener('click',()=>changeBlockLen(-1));
+  $('popLenP').addEventListener('click',()=>changeBlockLen(1));
+  $('popDel').addEventListener('click',()=>{ hideChordPop();
+    if(selBlock>=0){ S.prog.splice(selBlock,1); selBlock=-1; renderTimeline(); save(); } });
+  $('popClose').addEventListener('click',hideChordPop);
   // 自由コード追加（全ルート×全種類＋分数）：パレット外のコードもここから
   const aro=$('addRoot'); fillRoots(aro,false);
   const aqo=$('addQual'); fillQuals(aqo);
   const abo=$('addBass'); fillRoots(abo,true);
   $('btnAddChord').addEventListener('click',()=>{
     const root=+aro.value, q=aqo.value;
-    const c={root,q,len:S.beatsPerBar};
+    const c={root,q,len:newChordLen()};
     if(abo.value!=='') c.bass=+abo.value;
     S.prog.push(c); selBlock=S.prog.length-1; palAssist=null;
     recordRecentChord(root,q); renderTimeline(); save(); playChordNow(root,q,0.9,c.bass);
@@ -3690,14 +3846,42 @@ function duplicateSection(i){ // このセクションを丸ごと直後に複�
   S.sections.sort((a,b)=>a.bar-b.bar);
   selNotes.clear(); renderTimeline(); save();
 }
+/* セクション名の変更（旗のダブルクリック／一覧の名前クリック） */
+function renameSection(i){
+  const nm=(window.prompt('セクション名を入力', S.sections[i].name)||'').trim();
+  if(nm){ S.sections[i].name=nm; renderTimeline(); save(); }
+}
+/* 旗のドラッグ移動（小節単位）。クリック＝ジャンプ、ダブルクリック＝改名 */
+let secDrag=null;
+window.addEventListener('pointermove',ev=>{
+  if(!secDrag) return;
+  if(!secDrag.moved && Math.abs(ev.clientX-secDrag.x0)<DRAG_TH) return;
+  secDrag.moved=true;
+  const bar=rulerBar(ev);
+  secDrag.el.style.left=(bar*SPB()*CW)+'px'; // ドラッグ中は要素だけ動かす（作り直すと掴みが外れるため）
+  secDrag.bar=bar;
+});
+window.addEventListener('pointerup',()=>{
+  if(!secDrag) return;
+  const d=secDrag; secDrag=null;
+  if(!d.moved){ jumpSection(d.i); return; }              // 動かさず離した＝ジャンプ
+  const ex=S.sections.findIndex((s,j)=>j!==d.i && s.bar===d.bar);
+  if(ex>=0) S.sections.splice(ex,1);                     // 同じ小節に旗があれば置き換え
+  S.sections[d.i>ex&&ex>=0 ? d.i-1 : d.i].bar=d.bar;
+  S.sections.sort((a,b)=>a.bar-b.bar);
+  renderTimeline(); save();
+});
 function renderSections(){
   document.querySelectorAll('.sec-mark').forEach(e=>e.remove());
   const rc=$('rulerCells');
   S.sections.forEach((sec,i)=>{
     const d=document.createElement('div'); d.className='sec-mark';
     d.style.left=(sec.bar*SPB()*CW)+'px'; d.textContent='▸'+sec.name;
-    d.title='クリックでこのセクションの頭へ';
-    d.addEventListener('pointerdown',ev=>{ ev.stopPropagation(); jumpSection(i); });
+    d.title='クリック＝頭へジャンプ／ドラッグ＝移動／ダブルクリック＝名前を変更';
+    d.addEventListener('pointerdown',ev=>{ ev.stopPropagation();
+      secDrag={i, el:d, x0:ev.clientX, bar:sec.bar, moved:false};
+      try{ d.setPointerCapture(ev.pointerId); }catch(e){} });
+    d.addEventListener('dblclick',ev=>{ ev.stopPropagation(); renameSection(i); });
     rc.appendChild(d);
   });
   const box=$('sectionList'); if(!box) return;
@@ -3705,11 +3889,12 @@ function renderSections(){
   if(!S.sections.length){ box.innerHTML='<div class="shelf-empty">まだ目印がありません。再生ラインを置いて「ここに追加」</div>'; return; }
   S.sections.forEach((sec,i)=>{
     const row=document.createElement('div'); row.className='sec-item';
-    row.innerHTML=`<span class="sec-nm">▸ ${escHtml(sec.name)} <small>${sec.bar+1}小節〜</small></span>`+
+    row.innerHTML=`<span class="sec-nm" title="クリックで名前を変更">▸ ${escHtml(sec.name)} <small>${sec.bar+1}小節〜</small></span>`+
       `<span class="sec-btns"><button title="頭へジャンプ" data-a="j">▶</button>`+
       `<button title="このセクションをループ" data-a="l">🔁</button>`+
       `<button title="このセクションを直後に複製" data-a="d">⧉</button>`+
       `<button title="削除" data-a="x">🗑</button></span>`;
+    row.querySelector('.sec-nm').onclick=()=>renameSection(i);
     row.querySelector('[data-a="j"]').onclick=()=>jumpSection(i);
     row.querySelector('[data-a="l"]').onclick=()=>loopSection(i);
     row.querySelector('[data-a="d"]').onclick=()=>duplicateSection(i);
