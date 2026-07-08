@@ -2628,6 +2628,7 @@ function stop(){
 function seekTo(step){
   curStep=step; dispQueue=[]; lastDisp=null;
   if(playing){
+    playAnchor=step; // 再生中の手動移動＝新しい“戻り先”にする（停止でここへ戻る）
     nextTime=AC.currentTime+0.05;
   }else{
     const ph=$('playhead');
@@ -3120,7 +3121,11 @@ function setView(v){
   clearKbdMarks(); litChord(null);
   if(v==='quiz'){ stop(); setLearnMode(learnMode); }
   if(v==='howto'){ stop(); renderHowto(); }
-  if(v==='course'){ renderCourse(); startCourseTick(); } else { stopCourseTick(); }
+  if(v==='course'){
+    // 講座中はコード伴奏を自動ON（既定の“目印だけ”のままだと、初心者がSTEP2で▶を押しても無音になるため）
+    if(!S.chord.play){ S.chord.play=true; updateChordBtn(); }
+    renderCourse(); startCourseTick();
+  } else { stopCourseTick(); }
 }
 $('tabProject').addEventListener('click',()=>setView('project'));
 $('tabHowto').addEventListener('click',()=>setView('howto'));
