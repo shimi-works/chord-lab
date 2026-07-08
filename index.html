@@ -527,7 +527,7 @@
     <button class="tb-btn" id="btnStop" title="停止 (先頭へ)">■</button>
     <button class="tb-btn" id="btnPlay" title="再生/停止 (Space)。停止すると再生を始めた地点に戻ります">▶</button>
     <button class="tb-btn" id="btnRec" title="録音：ONにして弾くと、再生位置にノートが記録されます（テンキー ＊）">⏺</button>
-    <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーを Shift＋ドラッグで範囲指定／テンキー ／）">🔁</button>
+    <button class="tb-btn" id="btnLoop" title="ループ再生（範囲指定：PC=ルーラーをShift＋ドラッグ／スマホ=ルーラーを長押し→ドラッグ／テンキー ／）">🔁</button>
     <button class="tb-btn" id="btnKbd" title="下の鍵盤を表示/非表示（ロールを広く使う）">🎹</button>
     <div id="pos">1.1</div>
   </div>
@@ -2722,21 +2722,35 @@ function rulerStep(ev){
   const step=Math.round((ev.clientX-rect.left)/CW);
   return Math.max(0, Math.min(curBars*SPB(), step));
 }
+const LONGPRESS_MS=350, LONGPRESS_MOVE_PX=8; // 長押し判定：この時間動かなければループ作成モードへ
 $('rulerCells').addEventListener('pointerdown',ev=>{
   // ループ範囲の端ハンドル → 伸縮
   if(ev.target.classList.contains('loop-h')){
     loopEdge=ev.target.classList.contains('l')?'l':'r';
     return;
   }
-  if(ev.shiftKey){ // Shift+ドラッグ＝ループ範囲を作る
+  if(ev.shiftKey){ // Shift+ドラッグ＝ループ範囲を作る（PC）
     const bar=rulerBar(ev);
     rulerDrag={mode:'loop', startBar:bar, endBar:bar, moved:false};
   }else{ // 通常ドラッグ＝再生位置バーを動かす（スクラブ）
-    rulerDrag={mode:'scrub'};
+    rulerDrag={mode:'scrub', px:ev.clientX, py:ev.clientY, downBar:rulerBar(ev), lpTimer:null};
     seekTo(rulerStep(ev));
+    // タッチは長押し→そのままドラッグでループ範囲（スマホにShiftが無いため）
+    if(ev.pointerType==='touch'){
+      rulerDrag.lpTimer=setTimeout(()=>{
+        if(!rulerDrag || rulerDrag.mode!=='scrub') return;
+        const bar=rulerDrag.downBar;
+        rulerDrag={mode:'loop', startBar:bar, endBar:bar, moved:false};
+        S.loop.start=bar*SPB(); S.loop.end=(bar+1)*SPB(); S.loop.on=true; // まず1小節で見せる
+        renderLoop(); updateLoopBtn();
+        if(navigator.vibrate) navigator.vibrate(30); // 切替の手応え
+      }, LONGPRESS_MS);
+    }
     try{ $('rulerCells').setPointerCapture(ev.pointerId); }catch(e){}
   }
 });
+// 長押し中のコンテキストメニュー（Android）を抑止
+$('rulerCells').addEventListener('contextmenu',ev=>ev.preventDefault());
 /* ループ端ハンドルのドラッグで始点/終点を伸縮（最小1小節） */
 window.addEventListener('pointermove',ev=>{
   if(!loopEdge) return;
@@ -2748,7 +2762,13 @@ window.addEventListener('pointermove',ev=>{
 window.addEventListener('pointerup',()=>{ if(loopEdge){ loopEdge=null; save(); } });
 window.addEventListener('pointermove',ev=>{
   if(!rulerDrag) return;
-  if(rulerDrag.mode==='scrub'){ seekTo(rulerStep(ev)); return; } // 再生位置バーを移動
+  if(rulerDrag.mode==='scrub'){
+    // 指が動いたら「長押し」ではない → ループ切替タイマーを解除してスクラブ続行
+    if(rulerDrag.lpTimer && (Math.abs(ev.clientX-rulerDrag.px)>LONGPRESS_MOVE_PX || Math.abs(ev.clientY-rulerDrag.py)>LONGPRESS_MOVE_PX)){
+      clearTimeout(rulerDrag.lpTimer); rulerDrag.lpTimer=null;
+    }
+    seekTo(rulerStep(ev)); return; // 再生位置バーを移動
+  }
   const bar=rulerBar(ev);
   if(bar!==rulerDrag.endBar || rulerDrag.moved){
     rulerDrag.endBar=bar; rulerDrag.moved=true;
@@ -2760,7 +2780,8 @@ window.addEventListener('pointermove',ev=>{
 });
 window.addEventListener('pointerup',()=>{
   if(!rulerDrag) return;
-  if(rulerDrag.mode==='loop'){ if(!rulerDrag.moved) seekTo(rulerDrag.startBar*SPB()); else save(); }
+  if(rulerDrag.lpTimer) clearTimeout(rulerDrag.lpTimer); // 離したら長押し判定は破棄
+  if(rulerDrag.mode==='loop') save(); // ループ範囲を確定（長押しのみ＝1小節、ドラッグ＝指定範囲）
   // scrub は seekTo 済みなので後処理不要
   rulerDrag=null;
 });
@@ -3246,7 +3267,7 @@ function renderHowto(){
         <li><b>2本指でピンチ</b>＝ロールをズーム＆移動（画面が小さくても全体を見渡せます）</li>
         <li>道具の <b>✏️ペン</b>＝タップで音符を置く、<b>🧹消しゴム</b>＝タップ／なぞって消す</li>
         <li><b>1本指でドラッグ</b>＝範囲選択（囲った音符をまとめて選択）。選んで <b>🧹</b> や削除でまとめて消せます</li>
-        <li><b>ループ範囲</b>＝スマホでは <b>🔁</b> を押して全体ループ→ルーラー両端の <b>‹ ›</b> ハンドルをドラッグして範囲をせばめる（PCは Shift＋ドラッグでも可）</li>
+        <li><b>ループ範囲</b>＝ルーラーを<b>長押し</b>（ブルッと震えたら）そのまま<b>横にドラッグ</b>。または <b>🔁</b>→両端の <b>‹ ›</b> ハンドルで調整（PCは Shift＋ドラッグ）</li>
       </ul></div>
 
     <div class="ht-sec"><h3>💾 見やすさ・保存・共有・書き出し</h3>
