@@ -117,6 +117,13 @@
   .sm-btn:hover{border-color:var(--accent)}
   .sm-btn.danger:hover{border-color:var(--red); color:var(--red)}
   .sm-btn.on{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a; color:#fff; font-weight:700}
+  /* コードレーン左端のコード伴奏コントロール（真横） */
+  .keyspacer.chord-ks{flex-direction:column; justify-content:center; gap:3px; padding:3px 2px}
+  .chord-ks-btn{width:100%; font-size:14px; line-height:1; padding:2px 0; border-radius:4px;
+    background:var(--panel2); border:1px solid var(--line); color:var(--txt); cursor:pointer}
+  .chord-ks-btn:hover{border-color:var(--accent)}
+  .chord-ks-btn.on{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a}
+  .chord-ks-vol{width:42px; height:12px; cursor:pointer}
   .hint-txt{font-size:11px; color:var(--txt-dim); line-height:1.6; margin-top:6px}
   /* コード提案（代理・次の一手） */
   .sug-cur{font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
@@ -642,13 +649,7 @@
           </select>
         </div>
         <div class="hint-txt"><b>コードレーンへドラッグ</b>＝進行に追加／<b>ピアノロールへドラッグ</b>＝その和音を音符で配置（上の<b>転回形</b>が反映されます）。<b>タップ</b>で構成音を赤く表示（試聴）。</div>
-        <div class="insp-title" style="margin-top:14px">🎼 コード伴奏（鳴らす / 目印）</div>
-        <button class="sm-btn" id="btnChordPlay" style="width:100%; padding:9px; font-size:13px" title="コードを伴奏として鳴らすか、目印だけにするか切り替え">🔇 いまは目印だけ（タップで鳴らす）</button>
-        <div class="insp-row" style="align-items:center; margin-top:6px">
-          <span class="tb-lbl" style="flex:none">音量</span>
-          <input type="range" class="mix-vol" id="chordVol" min="0" max="100" value="60" title="コード伴奏の音量" style="flex:1">
-        </div>
-        <div class="hint-txt">既定は<b>コードを鳴らさず“目印”だけ</b>（曲の土台の表示）。上のボタンで<b>伴奏として鳴らす</b>に切り替え、音量も調整できます。</div>
+        <div class="hint-txt" style="margin-top:10px">🔊 <b>コードを鳴らす/目印の切替と音量</b>は、<b>コードレーンの左端</b>（🔊ボタン＋スライダー）にあります。既定は<b>“目印だけ”で無音</b>です。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">🎵 コード提案（代理・次の一手）</div>
@@ -803,7 +804,10 @@
         </div>
         <div id="chordLaneWrap">
           <div id="chordLane">
-            <div class="keyspacer">CHORD</div>
+            <div class="keyspacer chord-ks" title="コード伴奏：鳴らす/目印の切替＆音量">
+              <button class="chord-ks-btn" id="btnChordPlay" title="コードを鳴らす ⇄ 目印だけ">🔇</button>
+              <input type="range" class="chord-ks-vol" id="chordVol" min="0" max="100" value="60" title="コード伴奏の音量">
+            </div>
             <div id="chordCells"></div>
           </div>
         </div>
@@ -1237,7 +1241,8 @@ function refreshControlsFromState(){
 function updateChordBtn(){
   const b=$('btnChordPlay'); if(!b) return;
   b.classList.toggle('on', S.chord.play);
-  b.textContent = S.chord.play ? '🔊 コードを鳴らす中（タップで目印に）' : '🔇 いまは目印だけ（タップで鳴らす）';
+  b.textContent = S.chord.play ? '🔊' : '🔇';
+  b.title = S.chord.play ? 'コードを鳴らす中（タップで目印だけに）' : 'いまは目印だけ（タップでコードを鳴らす）';
 }
 function loadSong(id){
   const s=loadSongs().find(x=>x.id===id); if(!s) return;
