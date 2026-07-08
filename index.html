@@ -116,6 +116,7 @@
     border-radius:4px; padding:5px 4px; font-size:12px}
   .sm-btn:hover{border-color:var(--accent)}
   .sm-btn.danger:hover{border-color:var(--red); color:var(--red)}
+  .sm-btn.on{background:linear-gradient(#2fae62,#1f8c4c); border-color:#14663a; color:#fff; font-weight:700}
   .hint-txt{font-size:11px; color:var(--txt-dim); line-height:1.6; margin-top:6px}
   /* コード提案（代理・次の一手） */
   .sug-cur{font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
@@ -514,7 +515,7 @@
   <div class="tb-group">
     <button class="tb-btn" id="btnTop" title="先頭に戻る（テンキー . / Home）">⏮</button>
     <button class="tb-btn" id="btnStop" title="停止 (先頭へ)">■</button>
-    <button class="tb-btn" id="btnPlay" title="再生/一時停止 (Space、テンキーEnterで再生)">▶</button>
+    <button class="tb-btn" id="btnPlay" title="再生/停止 (Space)。停止すると再生を始めた地点に戻ります">▶</button>
     <button class="tb-btn" id="btnRec" title="録音：ONにして弾くと、再生位置にノートが記録されます（テンキー ＊）">⏺</button>
     <button class="tb-btn" id="btnLoop" title="ループ再生（ルーラーをドラッグで範囲指定／テンキー ／）">🔁</button>
     <button class="tb-btn" id="btnKbd" title="下の鍵盤を表示/非表示（ロールを広く使う）">🎹</button>
@@ -641,11 +642,13 @@
           </select>
         </div>
         <div class="hint-txt"><b>コードレーンへドラッグ</b>＝進行に追加／<b>ピアノロールへドラッグ</b>＝その和音を音符で配置（上の<b>転回形</b>が反映されます）。<b>タップ</b>で構成音を赤く表示（試聴）。</div>
-        <div class="insp-row" style="align-items:center;margin-top:10px">
-          <label class="chk" style="flex:none"><input type="checkbox" id="chordPlay"> 🔊 コードも鳴らす</label>
+        <div class="insp-title" style="margin-top:14px">🎼 コード伴奏（鳴らす / 目印）</div>
+        <button class="sm-btn" id="btnChordPlay" style="width:100%; padding:9px; font-size:13px" title="コードを伴奏として鳴らすか、目印だけにするか切り替え">🔇 いまは目印だけ（タップで鳴らす）</button>
+        <div class="insp-row" style="align-items:center; margin-top:6px">
+          <span class="tb-lbl" style="flex:none">音量</span>
           <input type="range" class="mix-vol" id="chordVol" min="0" max="100" value="60" title="コード伴奏の音量" style="flex:1">
         </div>
-        <div class="hint-txt">既定では<b>コードは鳴らさず“目印”だけ</b>（曲づくりの土台の表示）。<b>チェックで伴奏として鳴り</b>、右のスライダーで音量を調整できます。</div>
+        <div class="hint-txt">既定は<b>コードを鳴らさず“目印”だけ</b>（曲の土台の表示）。上のボタンで<b>伴奏として鳴らす</b>に切り替え、音量も調整できます。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">🎵 コード提案（代理・次の一手）</div>
@@ -1227,8 +1230,14 @@ function refreshControlsFromState(){
   $('seventh').checked=S.seventh; $('beatsSel').value=S.beatsPerBar;
   $('quantSel').value=S.quantize; $('instSel').value=S.activeTrack;
   if($('trTarget')) $('trTarget').value=S.keyRoot;
-  if($('chordPlay')){ $('chordPlay').checked=S.chord.play; $('chordVol').value=Math.round(S.chord.vol*100); }
+  if($('btnChordPlay')){ updateChordBtn(); $('chordVol').value=Math.round(S.chord.vol*100); }
   renderMixer();
+}
+/* コード伴奏トグルの見た目を状態に同期 */
+function updateChordBtn(){
+  const b=$('btnChordPlay'); if(!b) return;
+  b.classList.toggle('on', S.chord.play);
+  b.textContent = S.chord.play ? '🔊 コードを鳴らす中（タップで目印に）' : '🔇 いまは目印だけ（タップで鳴らす）';
 }
 function loadSong(id){
   const s=loadSongs().find(x=>x.id===id); if(!s) return;
@@ -2480,23 +2489,32 @@ function schedule(){
     curStep++;
   }
 }
+let playAnchor=null; // 再生を始めた地点（停止時にここへ戻る）
+function haltTransport(){
+  playing=false; $('btnPlay').classList.remove('on');
+  clearInterval(timerId); litChord(null);
+  if(recording){ recording=false; $('btnRec').classList.remove('on'); } // 停止で録音も解除
+}
 function play(){
   initAudio();
   if(playing) return pause();
+  playAnchor=curStep;            // 再生を始めた地点を記憶
   playing=true; $('btnPlay').classList.add('on');
   nextTime=AC.currentTime+0.06;
   dispQueue=[]; lastDisp=null;
   timerId=setInterval(schedule,25);
   requestAnimationFrame(animate);
 }
+/* 停止（Space/▶トグル）：再生を始めた地点へ自動で戻る */
 function pause(){
-  playing=false; $('btnPlay').classList.remove('on');
-  clearInterval(timerId); litChord(null);
-  if(recording){ recording=false; $('btnRec').classList.remove('on'); } // 停止で録音も解除
+  haltTransport();
+  if(playAnchor!=null){ const a=playAnchor; playAnchor=null; seekTo(a); }
 }
+/* ■ 停止ボタン：曲の先頭へ戻す（開始地点ではなく1小節目） */
 function stop(){
-  pause(); curStep=0; $('pos').textContent='1.1';
-  $('playhead').style.display='none';
+  haltTransport(); playAnchor=null;
+  curStep=0; dispQueue=[]; lastDisp=null;
+  $('pos').textContent='1.1'; $('playhead').style.display='none';
 }
 /* 指定ステップへシーク（再生中なら鳴らしたまま移動） */
 function seekTo(step){
@@ -3270,9 +3288,10 @@ function initControls(){
     recordRecentChord(S.prog[selBlock].root,S.prog[selBlock].q);
     renderTimeline(); save(); playChordNow(S.prog[selBlock].root,S.prog[selBlock].q); };
   ero.addEventListener('change',editSelChord); eqo.addEventListener('change',editSelChord);
-  // コード伴奏（既定OFF＝目印だけ）
-  $('chordPlay').checked=S.chord.play; $('chordVol').value=Math.round(S.chord.vol*100);
-  $('chordPlay').addEventListener('change',e=>{ S.chord.play=e.target.checked; save(); });
+  // コード伴奏（既定OFF＝目印だけ）。目立つトグルボタンで切り替え
+  updateChordBtn(); $('chordVol').value=Math.round(S.chord.vol*100);
+  $('btnChordPlay').addEventListener('click',()=>{ S.chord.play=!S.chord.play; updateChordBtn(); save();
+    if(S.chord.play && S.prog.length) playChordNow(S.prog[0].root,S.prog[0].q); }); // ONにしたら一度試聴
   $('chordVol').addEventListener('input',e=>{ S.chord.vol=(+e.target.value)/100; save(); });
   $('scaleType').value=S.scaleType;
   $('bpm').value=S.bpm;
