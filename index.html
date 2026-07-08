@@ -1504,7 +1504,8 @@ function renderTimeline(){
     el.addEventListener('dblclick',()=>{ hideChordPop(); S.prog.splice(i,1); selBlock=-1; renderTimeline(); save(); });
     cc.appendChild(el);
   });
-  $('blockLenLabel').textContent = selBlock>=0 ? `長さ: ${S.prog[selBlock].len}拍` : '長さ: --';
+  if(selBlock>=S.prog.length) selBlock=-1; // undo/読込等で進行が短くなった時の迷子ガード
+  $('blockLenLabel').textContent = (selBlock>=0&&S.prog[selBlock]) ? `長さ: ${S.prog[selBlock].len}拍` : '長さ: --';
   if(selBlock<0) hideChordPop(); // 選択が外れたら編集ポップも閉じる
   // コード編集セレクタを選択中ブロックに同期（未選択なら無効化）
   { const er=$('editRoot'), eq=$('editQual'), has=(selBlock>=0 && !!S.prog[selBlock]);
@@ -1513,7 +1514,7 @@ function renderTimeline(){
         er.value=c0.rest?0:c0.root; eq.value=c0.rest?'':c0.q;
         const eb=$('editBass'); if(eb) eb.value=(typeof c0.bass==='number')?c0.bass:''; } } }
   // コードアシスト: 選択またはパレットタップしたコードの構成音の行を赤くハイライト
-  const acChord = palAssist || (selBlock>=0 && !S.prog[selBlock].rest ? {root:S.prog[selBlock].root,q:S.prog[selBlock].q} : null);
+  const acChord = palAssist || (selBlock>=0 && S.prog[selBlock] && !S.prog[selBlock].rest ? {root:S.prog[selBlock].root,q:S.prog[selBlock].q} : null);
   const assistPcs = acChord ? new Set(CHORD[acChord.q].iv.map(iv=>(acChord.root+iv)%12)) : null;
   const scp = scalePcs(); // 現在のキー/スケールの音
   rollRows.forEach(r=>{
