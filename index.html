@@ -1070,6 +1070,24 @@ function initAudio(){
   loadSoundfonts(); // 高音質サンプルの読み込み開始（非同期・失敗しても合成音で鳴る）
 }
 function trackOut(inst){ return (trackGain[inst]||master); }
+/* ===== 鳴っている音の登録簿（停止で即消音するため） ===== */
+const liveVoices=[]; // {g:GainNode, st:[stop可能ノード], end:終了予定時刻}
+function regVoice(g, st, end){
+  liveVoices.push({g, st, end});
+  if(liveVoices.length>240){ const now=AC?AC.currentTime:0; // 終わった音を間引く
+    for(let i=liveVoices.length-1;i>=0;i--) if(liveVoices[i].end<now) liveVoices.splice(i,1); }
+}
+/* 停止（Space/■）で即座に全ての音を止める：サンプル音源＋内蔵シンセの両方 */
+function stopAllSound(){
+  if(!AC) return;
+  const t=AC.currentTime;
+  for(const k in SF){ try{ SF[k].stop(); }catch(e){} }   // soundfontの発音を全停止
+  liveVoices.forEach(v=>{ try{
+    v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(0,t);
+    v.st.forEach(n=>{ try{ n.stop(t+0.01); }catch(e){} });
+  }catch(e){} });
+  liveVoices.length=0;
+}
 // 楽器ごとの合成パラメータ（サンプルが読めない時のフォールバック）
 const INST={
   piano :{o1:'triangle',o2:'sawtooth',o2g:0.25,det:4,lp:3200,oct:0,  rel:0.18,sus:0.55},
@@ -1155,6 +1173,7 @@ function playNote(midi, when, dur, vel=0.4, inst){
   g.gain.setValueAtTime(vel*p.sus,Math.max(t+0.15,end-0.01));
   g.gain.exponentialRampToValueAtTime(0.0008,end+p.rel);
   o1.start(t); o2.start(t); o1.stop(end+0.25); o2.stop(end+0.25);
+  regVoice(g,[o1,o2],end+0.3); // 停止で即消音できるよう登録（ライブ再生のみこの関数を通る）
 }
 /* ===== ドラムキット =====
    ロールの行(midi)に打楽器を割り当てる。上＝シンバル/ハット、下＝キックの並び。
@@ -1192,6 +1211,7 @@ function drumClick(ctx,dest,t,vel,f){ // ごく短いアタック音（バチが
   const g=ctx.createGain(); o.connect(g); g.connect(dest);
   g.gain.setValueAtTime(vel,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.012);
   o.start(t); o.stop(t+0.02);
+  if(ctx===AC) regVoice(g,[o],t+0.03);
 }
 function drumNoise(ctx,dest,t,vel,dur,hpF,lpF){ // 帯域を絞ったノイズ（スナッピー/シズル）
   const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
@@ -1200,15 +1220,18 @@ function drumNoise(ctx,dest,t,vel,dur,hpF,lpF){ // 帯域を絞ったノイズ�
   const g=ctx.createGain(); src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(dest);
   g.gain.setValueAtTime(vel,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
   src.start(t); src.stop(t+dur);
+  if(ctx===AC) regVoice(g,[src],t+dur+0.02);
 }
 const METAL_RATIOS=[2,3,4.16,5.43,6.79,8.21]; // 808系ハットの非整数倍音（金属らしさの素）
 function drumMetal(ctx,dest,t,vel,dur,hpF,base){ // 金属パーシャルの束（ハット/ライド/シンバル）
   const g=ctx.createGain(); const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=hpF;
   const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=12000;
   g.connect(hp); hp.connect(lp); lp.connect(dest);
+  const oscs=[];
   METAL_RATIOS.forEach(r=>{ const o=ctx.createOscillator(); o.type='square';
-    o.frequency.value=(base||130)*r; o.connect(g); o.start(t); o.stop(t+dur+0.02); });
+    o.frequency.value=(base||130)*r; o.connect(g); o.start(t); o.stop(t+dur+0.02); oscs.push(o); });
   g.gain.setValueAtTime(vel/3,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  if(ctx===AC) regVoice(g,oscs,t+dur+0.04);
 }
 function synthDrum(ctx, dest, p, t, vel){
   const g=ctx.createGain(); g.connect(dest);
@@ -1219,6 +1242,7 @@ function synthDrum(ctx, dest, p, t, vel){
     o.connect(g);
     g.gain.setValueAtTime(vel*1.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.24);
     o.start(t); o.stop(t+0.26);
+    if(ctx===AC) regVoice(g,[o],t+0.28);
   }else if(p.kind==='tom'){ // 音程落下＋アタック＋うっすら皮ノイズ
     drumClick(ctx,dest,t,vel*0.3,2200);
     drumNoise(ctx,dest,t,vel*0.18,0.03,900,6000);
@@ -1227,12 +1251,13 @@ function synthDrum(ctx, dest, p, t, vel){
     o.connect(g);
     g.gain.setValueAtTime(vel*1.0,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.34);
     o.start(t); o.stop(t+0.36);
+    if(ctx===AC) regVoice(g,[o],t+0.38);
   }else if(p.kind==='snare'){ // 胴鳴り2音＋明るいスナッピー＋アタック
     drumClick(ctx,dest,t,vel*0.4,3600);
     [196,286].forEach((f,i)=>{ const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(f,t);
       const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
       gb.gain.setValueAtTime(vel*(i?0.22:0.4),t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.09);
-      o.start(t); o.stop(t+0.11); });
+      o.start(t); o.stop(t+0.11); if(ctx===AC) regVoice(gb,[o],t+0.12); });
     drumNoise(ctx,dest,t,vel*0.85,0.20,1700,9500);
   }else if(p.kind==='clap'){ // 手拍子＝3連バースト＋残響ノイズ
     [0,0.012,0.026].forEach(off=>drumNoise(ctx,dest,t+off,vel*0.5,0.035,1200,6500));
@@ -1242,7 +1267,7 @@ function synthDrum(ctx, dest, p, t, vel){
     const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(830,t);
     const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
     gb.gain.setValueAtTime(vel*0.35,t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.05);
-    o.start(t); o.stop(t+0.06);
+    o.start(t); o.stop(t+0.06); if(ctx===AC) regVoice(gb,[o],t+0.07);
     drumNoise(ctx,dest,t,vel*0.25,0.025,3200,9000);
   }else if(p.kind==='metal'){ // ハット/ライド/シンバル/タンバリン＝金属パーシャル＋シズル
     drumMetal(ctx,dest,t,vel*(p.g||0.5),p.dur,p.hp,p.base||130);
@@ -1250,7 +1275,7 @@ function synthDrum(ctx, dest, p, t, vel){
     if(p.ping){ const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(p.ping,t);
       const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
       gb.gain.setValueAtTime(vel*0.16,t); gb.gain.exponentialRampToValueAtTime(0.001,t+p.dur*0.7);
-      o.start(t); o.stop(t+p.dur*0.72); }
+      o.start(t); o.stop(t+p.dur*0.72); if(ctx===AC) regVoice(gb,[o],t+p.dur*0.74); }
   }else{ // 旧noise系（保険）
     drumNoise(ctx,dest,t,vel*(p.g||0.5),p.dur,p.hp,14000);
   }
@@ -1276,6 +1301,7 @@ function click(when,accent){
   g.gain.setValueAtTime(accent?0.25:0.15,when);
   g.gain.exponentialRampToValueAtTime(0.001,when+0.04);
   o.start(when); o.stop(when+0.05);
+  regVoice(g,[o],when+0.06);
 }
 
 /* ================= ユーティリティ ================= */
@@ -2976,6 +3002,7 @@ let playAnchor=null; // 再生を始めた地点（停止時にここへ戻る�
 function haltTransport(){
   playing=false; $('btnPlay').classList.remove('on');
   clearInterval(timerId); litChord(null);
+  stopAllSound(); // 予約済み・鳴りっぱなしの音を即座に止める
   if(recording){ recording=false; $('btnRec').classList.remove('on'); } // 停止で録音も解除
 }
 function play(){
