@@ -597,8 +597,8 @@
     <select id="instSel">
       <option value="piano">🎹 ピアノ</option>
       <option value="piano2">🎹 ピアノ2</option>
-      <option value="guitar">🎸 ギター</option>
-      <option value="guitar2">🎸 ギター2</option>
+      <option value="guitar">🎸 アコギ</option>
+      <option value="guitar2">🎸 エレキ</option>
       <option value="bass">🎸 ベース</option>
       <option value="drums">🥁 ドラム</option>
     </select>
@@ -984,7 +984,7 @@ const HEADER_H = 22;                     // トラック見出しの高さ
 const LANE_GAP = 16;                      // レーン間の空き（見やすさ）
 let LANE_H = HEADER_H + ROWS*ROWH + LANE_GAP; // 1トラックのレーン全高（ズームで再計算）
 function recalcLaneH(){ LANE_H = HEADER_H + ROWS*ROWH + LANE_GAP; }
-const TRACK_LABEL = {piano:'🎹 ピアノ', piano2:'🎹 ピアノ2', guitar:'🎸 ギター', guitar2:'🎸 ギター2', bass:'🎸 ベース', drums:'🥁 ドラム'};
+const TRACK_LABEL = {piano:'🎹 ピアノ', piano2:'🎹 ピアノ2', guitar:'🎸 アコギ', guitar2:'🎸 エレキ', bass:'🎸 ベース', drums:'🥁 ドラム'};
 const KBD_LO = 48, KBD_HI = 83; // 鍵盤: C3〜B5
 const KEYMAP = {z:48,s:49,x:50,d:51,c:52,v:53,g:54,b:55,h:56,n:57,j:58,m:59,
   q:60,'2':61,w:62,'3':63,e:64,r:65,'5':66,t:67,'6':68,y:69,'7':70,u:71,
@@ -1063,7 +1063,9 @@ const INST={
   // ベースはロール(C4-C6)を2オクターブ下げて C2-C4 で鳴らす（ベースらしい低域。-12ではまだ高すぎた）
   bass  :{o1:'sine',    o2:'triangle',o2g:0.35,det:2,lp:900, oct:-24,rel:0.14,sus:0.72},
 };
-INST.piano2=INST.piano; INST.guitar2=INST.guitar; // 2本目レーンは同じ音色
+INST.piano2=INST.piano; // ピアノ2は同音色
+// エレキ（クリーン）：アコギより丸く長めのサステイン
+INST.guitar2={o1:'triangle',o2:'sawtooth',o2g:0.22,det:5,lp:3800,oct:0,rel:0.22,sus:0.62};
 /* ギター用バス：ほんのりコーラス（揺れる短ディレイ）＋高域を少し丸めて“弦の空気感”を出す。
    ライブ(AC)とWAVオフラインの両方で使う */
 function makeGuitarBus(ctx,out){
@@ -1083,8 +1085,8 @@ function makeGuitarBus(ctx,out){
 /* ===== 高音質サンプル（soundfont-player / GM音源）===== */
 let SF={}, sfLoaded=false;
 const SF_MAP={piano:'acoustic_grand_piano', piano2:'acoustic_grand_piano',
-  guitar:'acoustic_guitar_steel', guitar2:'acoustic_guitar_steel', bass:'electric_bass_finger',
-  chord:'acoustic_grand_piano'}; // 2本目レーンは同音色を各自のチャンネルへ。chord=コード伴奏用
+  guitar:'acoustic_guitar_steel', guitar2:'electric_guitar_clean', bass:'electric_bass_finger',
+  chord:'acoustic_grand_piano'}; // guitar=アコギ／guitar2=エレキ(クリーン)。chord=コード伴奏用
 function loadSoundfonts(retries){
   retries=retries||0;
   if(sfLoaded || !AC) return;
@@ -1760,8 +1762,8 @@ function exportMidi(){
     {t:0,d:[0xff,0x51,0x03,(usPerBeat>>16)&255,(usPerBeat>>8)&255,usPerBeat&255]},
     {t:0,d:[0xff,0x58,0x04,S.beatsPerBar,2,24,8]},
   ]));
-  const GM={piano:0, piano2:0, guitar:25, guitar2:25, bass:33};
-  const CHNAME={piano:'Piano', piano2:'Piano 2', guitar:'Guitar', guitar2:'Guitar 2', bass:'Bass', drums:'Drums'};
+  const GM={piano:0, piano2:0, guitar:25, guitar2:27, bass:33}; // guitar2=エレキ(クリーン)
+  const CHNAME={piano:'Piano', piano2:'Piano 2', guitar:'Ac.Guitar', guitar2:'E.Guitar', bass:'Bass', drums:'Drums'};
   TRACKS.forEach((tr,ti)=>{
     const mel=S.tracks[tr], keys=Object.keys(mel); if(!keys.length) return;
     const ch=(tr==='drums')?9:ti; const ev=[];
@@ -2749,7 +2751,7 @@ document.querySelectorAll('[data-drum]').forEach(btn=>{
 
 /* ================= ミキサー（音量・ミュート・ソロ） ================= */
 const TRACK_ICON={piano:'🎹',piano2:'🎹',guitar:'🎸',guitar2:'🎸',bass:'🎻',drums:'🥁'};
-const TRACK_JA={piano:'ピアノ',piano2:'ピアノ2',guitar:'ギター',guitar2:'ギター2',bass:'ベース',drums:'ドラム'};
+const TRACK_JA={piano:'ピアノ',piano2:'ピアノ2',guitar:'アコギ',guitar2:'エレキ',bass:'ベース',drums:'ドラム'};
 function renderMixer(){
   const box=$('mixer'); if(!box) return;
   box.innerHTML='';
@@ -3531,7 +3533,7 @@ function renderHowto(){
       <p>中央の大きな編集エリアが<b>ピアノロール</b>。上から順に：</p>
       <ul>
         <li><b>コードレーン</b>（青い帯）… 曲のコード進行を並べる場所</li>
-        <li><b>6つのトラック</b>… 🎹ピアノ×2 / 🎸ギター×2 / 🎸ベース / 🥁ドラム。ピアノ・ギターは2レーンずつあるので、<b>1本目=コード弾き・2本目=リフやメロディ</b>のように使い分けられます（各レーンの左に楽器名）</li>
+        <li><b>6つのトラック</b>… 🎹ピアノ×2 / 🎸<b>アコギ＋エレキ</b> / 🎸ベース / 🥁ドラム。ピアノは2レーン、ギターはアコースティックとエレキ（クリーン）の2種類。<b>コード弾きとリフ</b>で使い分けられます（各レーンの左に楽器名）</li>
         <li>いちばん下の<b>鍵盤</b>… クリックで音が鳴る（PCキーの Z列・Q列でも演奏可）</li>
         <li>左の<b>インスペクタ</b>… パレット・保存・ミキサーなどの道具箱</li>
         <li><b>ロールの縦線</b>… <b>太く明るい線＝小節の区切り</b>／中間の線＝拍（1拍ごと）／かすかな線＝16分音符のマス目です</li>
