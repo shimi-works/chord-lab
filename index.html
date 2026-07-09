@@ -1048,7 +1048,9 @@ function initAudio(){
   master = AC.createGain(); master.gain.value=1.6; // 全体音量（大きめ・コンプ/リミッターで歪み防止）
   master.connect(comp); comp.connect(AC.destination);
   // トラックごとの音量ノード（合成音・サンプル音の両方がここを通る）
-  TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); trackGain[tr]=g; });
+  TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol;
+    const out=(tr==='guitar'||tr==='guitar2')? makeGuitarBus(AC,master) : master; // ギターはコーラスバス経由
+    g.connect(out); trackGain[tr]=g; });
   // コード伴奏の専用チャンネル（ピアノのフェーダー/Muteに影響されない独立音量）
   { const cg=AC.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); trackGain.chord=cg; }
   loadSoundfonts(); // 高音質サンプルの読み込み開始（非同期・失敗しても合成音で鳴る）
@@ -1062,6 +1064,22 @@ const INST={
   bass  :{o1:'sine',    o2:'triangle',o2g:0.35,det:2,lp:900, oct:-24,rel:0.14,sus:0.72},
 };
 INST.piano2=INST.piano; INST.guitar2=INST.guitar; // 2本目レーンは同じ音色
+/* ギター用バス：ほんのりコーラス（揺れる短ディレイ）＋高域を少し丸めて“弦の空気感”を出す。
+   ライブ(AC)とWAVオフラインの両方で使う */
+function makeGuitarBus(ctx,out){
+  const inp=ctx.createGain();
+  const dry=ctx.createGain(); dry.gain.value=0.85;
+  const wet=ctx.createGain(); wet.gain.value=0.24;
+  const dl=ctx.createDelay(0.05); dl.delayTime.value=0.014;
+  const lfo=ctx.createOscillator(); lfo.frequency.value=0.8;
+  const lfoG=ctx.createGain(); lfoG.gain.value=0.0035;
+  lfo.connect(lfoG); lfoG.connect(dl.delayTime); lfo.start();
+  const shelf=ctx.createBiquadFilter(); shelf.type='highshelf'; shelf.frequency.value=5200; shelf.gain.value=-2.5;
+  const sum=ctx.createGain();
+  inp.connect(dry); inp.connect(dl); dl.connect(wet);
+  dry.connect(sum); wet.connect(sum); sum.connect(shelf); shelf.connect(out);
+  return inp;
+}
 /* ===== 高音質サンプル（soundfont-player / GM音源）===== */
 let SF={}, sfLoaded=false;
 const SF_MAP={piano:'acoustic_grand_piano', piano2:'acoustic_grand_piano',
@@ -1124,13 +1142,13 @@ const DRUM_KIT=[ // 13種。キック60/スネア70/閉ハット79/開ハット8
   {midi:66, lbl:'中タム',   name:'ミッドタム',             gm:47, kind:'tom', f0:190, f1:100},
   {midi:68, lbl:'高タム',   name:'ハイタム',               gm:50, kind:'tom', f0:250, f1:140},
   {midi:70, lbl:'スネア',   name:'スネア',                 gm:38, kind:'snare', core:true},
-  {midi:72, lbl:'クラップ', name:'ハンドクラップ',         gm:39, kind:'noise', dur:0.13, hp:1500, g:0.6},
-  {midi:74, lbl:'リム',     name:'サイドスティック（リム）',gm:37, kind:'noise', dur:0.03, hp:3000, g:0.55},
-  {midi:76, lbl:'タンバリン',name:'タンバリン',            gm:54, kind:'noise', dur:0.12, hp:8000, g:0.35},
-  {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'noise', dur:0.045, hp:7000, g:0.5, core:true},
-  {midi:81, lbl:'ライド',   name:'ライドシンバル',         gm:51, kind:'noise', dur:0.50,  hp:5000, g:0.32},
-  {midi:82, lbl:'開ハット', name:'オープンハイハット',     gm:46, kind:'noise', dur:0.30,  hp:6500, g:0.42},
-  {midi:84, lbl:'シンバル', name:'クラッシュシンバル',     gm:49, kind:'noise', dur:0.70,  hp:3500, g:0.5},
+  {midi:72, lbl:'クラップ', name:'ハンドクラップ',         gm:39, kind:'clap'},
+  {midi:74, lbl:'リム',     name:'サイドスティック（リム）',gm:37, kind:'rim'},
+  {midi:76, lbl:'タンバリン',name:'タンバリン',            gm:54, kind:'metal', dur:0.13, hp:7500, g:0.34, base:210},
+  {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'metal', dur:0.05,  hp:7800, g:0.5, base:130, core:true},
+  {midi:81, lbl:'ライド',   name:'ライドシンバル',         gm:51, kind:'metal', dur:0.55,  hp:5200, g:0.3, base:150, ping:5200},
+  {midi:82, lbl:'開ハット', name:'オープンハイハット',     gm:46, kind:'metal', dur:0.34,  hp:6800, g:0.42, base:130},
+  {midi:84, lbl:'シンバル', name:'クラッシュシンバル',     gm:49, kind:'metal', dur:0.85,  hp:3200, g:0.5, base:95},
 ];
 function drumFor(midi){
   let best=DRUM_KIT[0], bd=Infinity;
@@ -1140,39 +1158,75 @@ function drumFor(midi){
 }
 function noiseBuf(ctx,dur){ const b=ctx.createBuffer(1, Math.max(1,Math.ceil(ctx.sampleRate*dur)), ctx.sampleRate);
   const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
-/* 1つの打楽器を発音（ライブ再生とWAVオフラインで共通。ctx/destだけ差し替える） */
+/* ===== ドラム音源（内蔵シンセ・909/アコースティック折衷） =====
+   ライブ再生とWAVオフラインで共通。ctx/destだけ差し替える。
+   各声部＝アタック（クリック/バースト）＋ボディ（音程/胴鳴り）＋シズル（ノイズ/金属パーシャル） */
+function drumClick(ctx,dest,t,vel,f){ // ごく短いアタック音（バチが当たる瞬間）
+  const o=ctx.createOscillator(); o.type='square'; o.frequency.value=f||2500;
+  const g=ctx.createGain(); o.connect(g); g.connect(dest);
+  g.gain.setValueAtTime(vel,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.012);
+  o.start(t); o.stop(t+0.02);
+}
+function drumNoise(ctx,dest,t,vel,dur,hpF,lpF){ // 帯域を絞ったノイズ（スナッピー/シズル）
+  const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
+  const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=hpF;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=lpF||16000;
+  const g=ctx.createGain(); src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(dest);
+  g.gain.setValueAtTime(vel,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  src.start(t); src.stop(t+dur);
+}
+const METAL_RATIOS=[2,3,4.16,5.43,6.79,8.21]; // 808系ハットの非整数倍音（金属らしさの素）
+function drumMetal(ctx,dest,t,vel,dur,hpF,base){ // 金属パーシャルの束（ハット/ライド/シンバル）
+  const g=ctx.createGain(); const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=hpF;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=12000;
+  g.connect(hp); hp.connect(lp); lp.connect(dest);
+  METAL_RATIOS.forEach(r=>{ const o=ctx.createOscillator(); o.type='square';
+    o.frequency.value=(base||130)*r; o.connect(g); o.start(t); o.stop(t+dur+0.02); });
+  g.gain.setValueAtTime(vel/3,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+}
 function synthDrum(ctx, dest, p, t, vel){
   const g=ctx.createGain(); g.connect(dest);
-  if(p.kind==='kick'){
+  if(p.kind==='kick'){ // クリック＋サイン落下＋短い胴толч
+    drumClick(ctx,dest,t,vel*0.45,1700);
     const o=ctx.createOscillator(); o.type='sine';
-    o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(50,t+0.12);
+    o.frequency.setValueAtTime(165,t); o.frequency.exponentialRampToValueAtTime(46,t+0.10);
     o.connect(g);
-    g.gain.setValueAtTime(vel*1.1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
-    o.start(t); o.stop(t+0.2);
-  }else if(p.kind==='tom'){
+    g.gain.setValueAtTime(vel*1.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.24);
+    o.start(t); o.stop(t+0.26);
+  }else if(p.kind==='tom'){ // 音程落下＋アタック＋うっすら皮ノイズ
+    drumClick(ctx,dest,t,vel*0.3,2200);
+    drumNoise(ctx,dest,t,vel*0.18,0.03,900,6000);
     const o=ctx.createOscillator(); o.type='sine';
-    o.frequency.setValueAtTime(p.f0,t); o.frequency.exponentialRampToValueAtTime(p.f1,t+0.18);
+    o.frequency.setValueAtTime(p.f0,t); o.frequency.exponentialRampToValueAtTime(p.f1,t+0.20);
     o.connect(g);
-    g.gain.setValueAtTime(vel*0.95,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.30);
-    o.start(t); o.stop(t+0.32);
-  }else if(p.kind==='snare'){
-    const dur=0.18;
-    const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
-    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1200;
-    src.connect(hp); hp.connect(g);
-    g.gain.setValueAtTime(vel*0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
-    src.start(t); src.stop(t+dur);
-    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(180,t);
+    g.gain.setValueAtTime(vel*1.0,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.34);
+    o.start(t); o.stop(t+0.36);
+  }else if(p.kind==='snare'){ // 胴鳴り2音＋明るいスナッピー＋アタック
+    drumClick(ctx,dest,t,vel*0.4,3600);
+    [196,286].forEach((f,i)=>{ const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(f,t);
+      const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
+      gb.gain.setValueAtTime(vel*(i?0.22:0.4),t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+      o.start(t); o.stop(t+0.11); });
+    drumNoise(ctx,dest,t,vel*0.85,0.20,1700,9500);
+  }else if(p.kind==='clap'){ // 手拍子＝3連バースト＋残響ノイズ
+    [0,0.012,0.026].forEach(off=>drumNoise(ctx,dest,t+off,vel*0.5,0.035,1200,6500));
+    drumNoise(ctx,dest,t+0.03,vel*0.45,0.16,1200,6500);
+  }else if(p.kind==='rim'){ // サイドスティック＝硬いピング＋一瞬のノイズ
+    drumClick(ctx,dest,t,vel*0.8,2100);
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(830,t);
     const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
-    gb.gain.setValueAtTime(vel*0.32,t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.10);
-    o.start(t); o.stop(t+0.12);
-  }else{ // noise系（ハット・シンバル）
-    const dur=p.dur;
-    const src=ctx.createBufferSource(); src.buffer=noiseBuf(ctx,dur);
-    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=p.hp;
-    src.connect(hp); hp.connect(g);
-    g.gain.setValueAtTime(vel*(p.g||0.5),t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
-    src.start(t); src.stop(t+dur);
+    gb.gain.setValueAtTime(vel*0.35,t); gb.gain.exponentialRampToValueAtTime(0.001,t+0.05);
+    o.start(t); o.stop(t+0.06);
+    drumNoise(ctx,dest,t,vel*0.25,0.025,3200,9000);
+  }else if(p.kind==='metal'){ // ハット/ライド/シンバル/タンバリン＝金属パーシャル＋シズル
+    drumMetal(ctx,dest,t,vel*(p.g||0.5),p.dur,p.hp,p.base||130);
+    drumNoise(ctx,dest,t,vel*(p.g||0.5)*0.6,p.dur*0.8,p.hp,14000);
+    if(p.ping){ const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(p.ping,t);
+      const gb=ctx.createGain(); o.connect(gb); gb.connect(dest);
+      gb.gain.setValueAtTime(vel*0.16,t); gb.gain.exponentialRampToValueAtTime(0.001,t+p.dur*0.7);
+      o.start(t); o.stop(t+p.dur*0.72); }
+  }else{ // 旧noise系（保険）
+    drumNoise(ctx,dest,t,vel*(p.g||0.5),p.dur,p.hp,14000);
   }
 }
 function playDrum(midi,t,vel){ synthDrum(AC, trackOut('drums'), drumFor(midi), t, vel); }
@@ -1787,7 +1841,9 @@ async function exportWav(){
     const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-3; comp.ratio.value=12;
     try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
     const master=ctx.createGain(); master.gain.value=1.6; master.connect(comp); comp.connect(ctx.destination);
-    const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol; g.connect(master); tg[tr]=g; });
+    const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol;
+      const out=(tr==='guitar'||tr==='guitar2')? makeGuitarBus(ctx,master) : master; // 再生と同じギターバス
+      g.connect(out); tg[tr]=g; });
     const cg=ctx.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); // 伴奏専用チャンネル（再生と同じ独立音量）
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
     chordStarts().forEach(seg=>{ if(!S.chord.play || seg.ch.rest) return; // 伴奏OFF（既定=目印だけ）なら書き出さない。ソロの影響は受けない（再生と同じ）
