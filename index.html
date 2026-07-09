@@ -821,7 +821,7 @@
           <button class="sm-btn" id="btnMoveNotes" style="flex:1" title="選択ノート（未選択なら今のトラック全部）を選んだトラックへ移動">移動</button>
           <button class="sm-btn" id="btnCopyToTrack" style="flex:1" title="選択ノート（未選択なら全部）を選んだトラックへコピー">コピー</button>
         </div>
-        <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>貼り付け(Ctrl+V)は再生ライン（⏮や ルーラーで動かした位置）に入ります</b>。<b>右へ複製(Ctrl+D)</b>は繰り返しに便利。</div>
+        <div class="hint-txt" id="clipStatus">ロールで範囲選択 → コピー。<b>貼り付け(Ctrl+V／Mac:⌘V)は再生ラインの位置</b>に入ります。<b>右へ複製(Ctrl+D／⌘D)</b>は繰り返しに便利。</div>
       </div>
       <div class="insp-sec">
         <div class="insp-title">移調（キー一括変更）</div>
@@ -1117,13 +1117,18 @@ function playNote(midi, when, dur, vel=0.4, inst){
    基本3点（キック60・スネア70・閉ハット79）は従来の行のまま。旧3分割時代に
    その他の行へ置かれた音はタム等に変わることがある（各行にラベルを表示して明示）。
    中間の行は drumFor() が最も近い打楽器（同距離なら基本3点を優先）を返す。 */
-const DRUM_KIT=[
+const DRUM_KIT=[ // 13種。キック60/スネア70/閉ハット79/開ハット82は従来の行を維持（既存曲の互換）
   {midi:60, lbl:'キック',   name:'キック（バスドラム）',   gm:36, kind:'kick',  core:true},
-  {midi:66, lbl:'床タム',   name:'フロアタム',             gm:43, kind:'tom', f0:120, f1:60},
+  {midi:62, lbl:'床タム',   name:'フロアタム',             gm:43, kind:'tom', f0:110, f1:55},
+  {midi:64, lbl:'低タム',   name:'ロータム',               gm:45, kind:'tom', f0:150, f1:80},
+  {midi:66, lbl:'中タム',   name:'ミッドタム',             gm:47, kind:'tom', f0:190, f1:100},
+  {midi:68, lbl:'高タム',   name:'ハイタム',               gm:50, kind:'tom', f0:250, f1:140},
   {midi:70, lbl:'スネア',   name:'スネア',                 gm:38, kind:'snare', core:true},
-  {midi:73, lbl:'低タム',   name:'ロータム',               gm:47, kind:'tom', f0:180, f1:95},
-  {midi:76, lbl:'高タム',   name:'ハイタム',               gm:50, kind:'tom', f0:250, f1:140},
+  {midi:72, lbl:'クラップ', name:'ハンドクラップ',         gm:39, kind:'noise', dur:0.13, hp:1500, g:0.6},
+  {midi:74, lbl:'リム',     name:'サイドスティック（リム）',gm:37, kind:'noise', dur:0.03, hp:3000, g:0.55},
+  {midi:76, lbl:'タンバリン',name:'タンバリン',            gm:54, kind:'noise', dur:0.12, hp:8000, g:0.35},
   {midi:79, lbl:'閉ハット', name:'クローズドハイハット',   gm:42, kind:'noise', dur:0.045, hp:7000, g:0.5, core:true},
+  {midi:81, lbl:'ライド',   name:'ライドシンバル',         gm:51, kind:'noise', dur:0.50,  hp:5000, g:0.32},
   {midi:82, lbl:'開ハット', name:'オープンハイハット',     gm:46, kind:'noise', dur:0.30,  hp:6500, g:0.42},
   {midi:84, lbl:'シンバル', name:'クラッシュシンバル',     gm:49, kind:'noise', dur:0.70,  hp:3500, g:0.5},
 ];
@@ -2236,9 +2241,14 @@ $('rollBody').addEventListener('pointerdown',ev=>{
   }
   // 何もない所
   if(!hit.inGrid) return;
-  if(ev.altKey){ // Alt押しながら → ノート配置（ドラッグで連続配置も可）
+  if(ev.altKey){ // Alt(Mac:Option)+クリック → 配置。押したまま右へドラッグで長さを決められる（Cubaseの鉛筆と同じ）
     palAssist=null;
-    rollDrag={mode:'place'}; placeAt(hit);
+    const q=S.quantize||1, qstep=Math.floor(hit.step/q)*q;
+    const exist=findNoteAt(hit.midi,qstep);
+    if(!exist) placeAt(hit);
+    // 置いた（または触った）音を、そのままドラッグで伸縮できるモードへ
+    const start=exist? +exist.split(':')[1] : qstep;
+    rollDrag={mode:'place-size', midi:hit.midi, start};
   }else{ // Alt無し → ドラッグで矩形範囲選択（クリックだけなら選択解除）
     rollDrag={mode:'empty-down', x0:ev.clientX, y0:ev.clientY, gx:hit.x, gy:hit.y};
   }
@@ -2266,7 +2276,33 @@ $('rollBody').addEventListener('pointermove',ev=>{
   const hit=rollHit(ev);
   const dx=ev.clientX-(rollDrag.x0||0), dy=ev.clientY-(rollDrag.y0||0);
 
-  if(rollDrag.mode==='place'){ if(hit.inGrid) placeAt(hit); return; } // Altドラッグで連続配置
+  if(rollDrag.mode==='place'){ if(hit.inGrid) placeAt(hit); return; } // ペンのドラッグ＝連続配置
+
+  if(rollDrag.mode==='place-size'){ // Altを押している間：右へドラッグで置いた音の長さを調整
+    if(!hit.inGrid) return;
+    const mel=CM(), maxSteps=curBars*SPB();
+    if(hit.midi!==rollDrag.midi){ // 別の行へ動いた＝今の音の長さを確定し、新しい行に置いて続行
+      const doneKey=rollDrag.midi+':'+rollDrag.start;
+      if(doneKey in mel) lastNoteLen=mel[doneKey];
+      const q=S.quantize||1, qstep=Math.floor(hit.step/q)*q;
+      if(!findNoteAt(hit.midi,qstep)) placeAt(hit);
+      const ex=findNoteAt(hit.midi,qstep);
+      rollDrag={mode:'place-size', midi:hit.midi, start:ex? +ex.split(':')[1] : qstep};
+      return;
+    }
+    const key=rollDrag.midi+':'+rollDrag.start;
+    if(!(key in mel)) return;
+    const len=Math.max(1, Math.min(hit.step-rollDrag.start+1, maxSteps-rollDrag.start));
+    if(mel[key]!==len){
+      mel[key]=len;
+      for(const k in mel){ if(k===key) continue; // 伸ばして呑み込んだ音は整理（リサイズと同じ）
+        const [m,s]=k.split(':').map(Number);
+        if(m===rollDrag.midi && s>rollDrag.start && s<rollDrag.start+len) delete mel[k]; }
+      renderNotesActive();
+    }
+    autoScroll(ev);
+    return;
+  }
 
   if(rollDrag.mode==='erase'){ // 消しゴムをなぞる：通過した音符を消す
     const k=hit.inGrid?findNoteAt(hit.midi,hit.step):null;
@@ -2366,7 +2402,7 @@ window.addEventListener('pointerup',ev=>{
   if(d.mode==='noop'){ return; } // Shift選択は確定済み
   if(d.mode==='empty-down'){ selNotes.clear(); renderTimeline(); return; } // 空きクリック＝全選択解除
   if(d.mode==='note-down'){ renderTimeline(); return; } // ノートのクリック＝単体選択（既に確定）
-  if(d.mode==='resize'){ // リサイズ確定：この長さを記憶して、次に置く音へ引き継ぐ
+  if(d.mode==='resize' || d.mode==='place-size'){ // 確定した長さを記憶して、次に置く音へ引き継ぐ
     const k=d.midi+':'+d.start, mel=CM();
     if(k in mel) lastNoteLen=mel[k];
   }
@@ -3448,7 +3484,7 @@ function renderHowto(){
 
     <div class="ht-sec ht-key"><h3>✏️ 音の置き方（いちばん大事）</h3>
       <ul>
-        <li><b>Altキーを押しながらクリック</b>… その場所に音符を置く（押しながらドラッグで連続配置）。<b>置く長さは直前にリサイズした音の長さを引き継ぎます</b>（クオンタイズを変えるとリセット）</li>
+        <li><b>Alt（Mac: Option）＋クリック</b>… その場所に音符を置く。<b>押したまま右へドラッグすると、その場で長さを決められます</b>（別の行へ動かすと次の音を続けて置ける）。何もせず離すと直前と同じ長さ（クオンタイズ変更でリセット）</li>
         <li>置いた音を<b>クリック</b>＝選択 ／ <b>Shift+クリック</b>で複数選択 ／ 空きを<b>ドラッグ</b>で囲って範囲選択</li>
         <li>選択した音を<b>ドラッグ</b>＝移動 ／ 音の<b>右端をドラッグ</b>＝長さ変更 ／ <b>Delete</b>＝削除</li>
         <li><b>Ctrl+Z</b>＝一手戻す（↶ボタンでも。32手ぶん）／ <b>Ctrl+Y</b>＝やり直し</li>
@@ -3546,7 +3582,7 @@ function renderHowto(){
       </ul></div>
 
     <div class="ht-sec ht-key"><h3>⌨ ショートカットキー（Cubase準拠）</h3>
-      <p>DAW（Cubase）に近い操作で使えます。テンキー（数字キーパッド）中心のトランスポート：</p>
+      <p>DAW（Cubase）に近い操作で使えます。<b>MacはCtrl→⌘（コマンド）、Alt→Option</b>に読み替えてください（両方に対応済み。やり直しは ⌘⇧Z でもOK）。テンキーが無いキーボードでは⏮ボタンをどうぞ：</p>
       <ul>
         <li><b>テンキー .（ドット）</b>… 再生ラインを<b>先頭へ戻す</b>（Homeキーでも同じ）</li>
         <li><b>Space</b>… 再生／停止（トグル）　<b>テンキー Enter</b>… 再生開始</li>
