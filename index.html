@@ -217,7 +217,9 @@
   .note.tr-piano{background:linear-gradient(#6fb2ff,#3f8cff); border-color:#1d5cb0}
   .note.tr-piano2{background:linear-gradient(#b89aff,#8a5cf0); border-color:#5a2fb0}
   .note.tr-guitar{background:linear-gradient(#ffb45a,#f0902e); border-color:#a85c1e}
-  .note.tr-guitar2{background:linear-gradient(#ffe08a,#e0b83a); border-color:#a8842a}
+  .note.tr-guitarB{background:linear-gradient(#ffc98a,#e09a4a); border-color:#a86a2a}
+  .note.tr-guitar2{background:linear-gradient(#ff8a8a,#e05a3a); border-color:#a83a1e}
+  .note.tr-guitar2B{background:linear-gradient(#ffadc9,#e06a9a); border-color:#a83a6a}
   .note.tr-bass{background:linear-gradient(#8ef0a0,#39c96a); border-color:#1d7a4f}
   .note.tr-drums{background:linear-gradient(#ff9a9a,#f05a5a); border-color:#a83030}
   .note.dim{opacity:.42}  /* 非アクティブトラックのノートは薄く（表示のみ） */
@@ -229,7 +231,9 @@
   .tr-h-piano{background:linear-gradient(#3a5f9e,#2d4a7a)}
   .tr-h-piano2{background:linear-gradient(#5f3a9e,#4a2d7a)}
   .tr-h-guitar{background:linear-gradient(#9e6a3a,#7a4a2d)}
-  .tr-h-guitar2{background:linear-gradient(#9e8a3a,#7a692d)}
+  .tr-h-guitarB{background:linear-gradient(#9e7a4a,#7a5a38)}
+  .tr-h-guitar2{background:linear-gradient(#9e4a3a,#7a382d)}
+  .tr-h-guitar2B{background:linear-gradient(#9e3a6a,#7a2d52)}
   .tr-h-bass{background:linear-gradient(#3a8a5a,#2d6a3f)}
   .tr-h-drums{background:linear-gradient(#9e3a3a,#7a2d2d)}
   .lane-gap{height:var(--lanegap); background:#111}
@@ -598,7 +602,9 @@
       <option value="piano">🎹 ピアノ</option>
       <option value="piano2">🎹 ピアノ2</option>
       <option value="guitar">🎸 アコギ</option>
+      <option value="guitarB">🎸 アコギ2</option>
       <option value="guitar2">🎸 エレキ</option>
+      <option value="guitar2B">🎸 エレキ2</option>
       <option value="bass">🎸 ベース</option>
       <option value="drums">🥁 ドラム</option>
     </select>
@@ -765,8 +771,13 @@
         <div class="insp-title">ドラムパターン（貼り付け）</div>
         <div class="drum-pat-grid">
           <button class="sm-btn" data-drum="eight">🥁 8ビート</button>
+          <button class="sm-btn" data-drum="sixteen">🥁 16ビート</button>
           <button class="sm-btn" data-drum="four">🥁 四つ打ち</button>
+          <button class="sm-btn" data-drum="dance">🥁 ダンス</button>
           <button class="sm-btn" data-drum="rock">🥁 ロック</button>
+          <button class="sm-btn" data-drum="funk">🥁 ファンク</button>
+          <button class="sm-btn" data-drum="shuffle">🥁 シャッフル</button>
+          <button class="sm-btn" data-drum="ride8">🥁 ライド</button>
           <button class="sm-btn" data-drum="ballad">🥁 バラード</button>
         </div>
         <div class="hint-txt">クリックでドラムに丸ごと貼り付け（今の小節数ぶん）。ドラムトラックに切り替わります。</div>
@@ -984,7 +995,7 @@ const HEADER_H = 22;                     // トラック見出しの高さ
 const LANE_GAP = 16;                      // レーン間の空き（見やすさ）
 let LANE_H = HEADER_H + ROWS*ROWH + LANE_GAP; // 1トラックのレーン全高（ズームで再計算）
 function recalcLaneH(){ LANE_H = HEADER_H + ROWS*ROWH + LANE_GAP; }
-const TRACK_LABEL = {piano:'🎹 ピアノ', piano2:'🎹 ピアノ2', guitar:'🎸 アコギ', guitar2:'🎸 エレキ', bass:'🎸 ベース', drums:'🥁 ドラム'};
+const TRACK_LABEL = {piano:'🎹 ピアノ', piano2:'🎹 ピアノ2', guitar:'🎸 アコギ', guitarB:'🎸 アコギ2', guitar2:'🎸 エレキ', guitar2B:'🎸 エレキ2', bass:'🎸 ベース', drums:'🥁 ドラム'};
 const KBD_LO = 48, KBD_HI = 83; // 鍵盤: C3〜B5
 const KEYMAP = {z:48,s:49,x:50,d:51,c:52,v:53,g:54,b:55,h:56,n:57,j:58,m:59,
   q:60,'2':61,w:62,'3':63,e:64,r:65,'5':66,t:67,'6':68,y:69,'7':70,u:71,
@@ -999,19 +1010,21 @@ const S = {
   sections:[],             // セクションマーカー [{name, bar}]（Aメロ/サビ等の目印）
   chord:{play:false, vol:0.6}, // コード伴奏：既定は鳴らさず“目印”だけ。playをONで伴奏として鳴る
   prog:[],                 // [{root, q, len}] len=拍数(1〜16)
-  tracks:{piano:{},piano2:{},guitar:{},guitar2:{},bass:{},drums:{}}, // 楽器ごとの独立メロディ "midi:step"->長さ
+  tracks:{piano:{},piano2:{},guitar:{},guitarB:{},guitar2:{},guitar2B:{},bass:{},drums:{}}, // 楽器ごとの独立メロディ "midi:step"->長さ
   mixer:{ // 楽器ごとの音量・ミュート・ソロ
     piano  :{mute:false,solo:false,vol:1.0},
     piano2 :{mute:false,solo:false,vol:0.95},
     guitar :{mute:false,solo:false,vol:0.9},
+    guitarB:{mute:false,solo:false,vol:0.9},
     guitar2:{mute:false,solo:false,vol:0.9},
+    guitar2B:{mute:false,solo:false,vol:0.9},
     bass   :{mute:false,solo:false,vol:1.0},
     drums  :{mute:false,solo:false,vol:0.95},
   },
   quiz:{correct:0,total:0,streak:0,best:0},
 };
 // ピアノ/ギターは2レーンずつ（例：1=コード弾き用、2=リフ・メロディ用）
-const TRACKS=['piano','piano2','guitar','guitar2','bass','drums'];
+const TRACKS=['piano','piano2','guitar','guitarB','guitar2','guitar2B','bass','drums'];
 const CM=()=>S.tracks[S.activeTrack]; // 現在編集中トラックのメロディ
 
 const SPB = ()=> S.beatsPerBar*4; // 1小節のステップ数（16分音符の個数）
@@ -1049,7 +1062,8 @@ function initAudio(){
   master.connect(comp); comp.connect(AC.destination);
   // トラックごとの音量ノード（合成音・サンプル音の両方がここを通る）
   TRACKS.forEach(tr=>{ const g=AC.createGain(); g.gain.value=S.mixer[tr].vol;
-    const out=(tr==='guitar'||tr==='guitar2')? makeGuitarBus(AC,master) : master; // ギターはコーラスバス経由
+    const out=(tr==='guitar'||tr==='guitarB')? makeGuitarBus(AC,master)
+            : (tr==='guitar2'||tr==='guitar2B')? makeRockBus(AC,master) : master; // アコギ=コーラス／エレキ=ロックバス
     g.connect(out); trackGain[tr]=g; });
   // コード伴奏の専用チャンネル（ピアノのフェーダー/Muteに影響されない独立音量）
   { const cg=AC.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); trackGain.chord=cg; }
@@ -1063,9 +1077,10 @@ const INST={
   // ベースはロール(C4-C6)を2オクターブ下げて C2-C4 で鳴らす（ベースらしい低域。-12ではまだ高すぎた）
   bass  :{o1:'sine',    o2:'triangle',o2g:0.35,det:2,lp:900, oct:-24,rel:0.14,sus:0.72},
 };
-INST.piano2=INST.piano; // ピアノ2は同音色
-// エレキ（クリーン）：アコギより丸く長めのサステイン
-INST.guitar2={o1:'triangle',o2:'sawtooth',o2g:0.22,det:5,lp:3800,oct:0,rel:0.22,sus:0.62};
+INST.piano2=INST.piano; INST.guitarB=INST.guitar; // 2本目レーンは同音色
+// エレキ（ロック系）：エッジのある波形＋中域寄り
+INST.guitar2={o1:'sawtooth',o2:'square',o2g:0.3,det:7,lp:2900,oct:0,rel:0.18,sus:0.55};
+INST.guitar2B=INST.guitar2;
 /* ギター用バス：ほんのりコーラス（揺れる短ディレイ）＋高域を少し丸めて“弦の空気感”を出す。
    ライブ(AC)とWAVオフラインの両方で使う */
 function makeGuitarBus(ctx,out){
@@ -1082,10 +1097,19 @@ function makeGuitarBus(ctx,out){
   dry.connect(sum); wet.connect(sum); sum.connect(shelf); shelf.connect(out);
   return inp;
 }
+/* エレキ（ロック）用バス：中域プレゼンスを持ち上げ、高域のジリつきを整える“アンプ風”EQ */
+function makeRockBus(ctx,out){
+  const inp=ctx.createGain();
+  const mid=ctx.createBiquadFilter(); mid.type='peaking'; mid.frequency.value=2400; mid.Q.value=0.9; mid.gain.value=2.5;
+  const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=6500;
+  inp.connect(mid); mid.connect(lp); lp.connect(out);
+  return inp;
+}
 /* ===== 高音質サンプル（soundfont-player / GM音源）===== */
 let SF={}, sfLoaded=false;
 const SF_MAP={piano:'acoustic_grand_piano', piano2:'acoustic_grand_piano',
-  guitar:'acoustic_guitar_steel', guitar2:'electric_guitar_clean', bass:'electric_bass_finger',
+  guitar:'acoustic_guitar_steel', guitarB:'acoustic_guitar_steel',
+  guitar2:'overdriven_guitar', guitar2B:'overdriven_guitar', bass:'electric_bass_finger',
   chord:'acoustic_grand_piano'}; // guitar=アコギ／guitar2=エレキ(クリーン)。chord=コード伴奏用
 function loadSoundfonts(retries){
   retries=retries||0;
@@ -1345,7 +1369,7 @@ function applySnapshot(d){
   S.prog=(d.prog||[]).map(c=>({root:c.root,q:c.q,len:c.len||4,
     ...(typeof c.bass==='number'?{bass:c.bass}:{}),
     ...(c.rest?{rest:true}:{})})); // 分数ベース・空白（無コード）ブロックも引き継ぐ
-  S.tracks={piano:{},piano2:{},guitar:{},guitar2:{},bass:{},drums:{}};
+  S.tracks={piano:{},piano2:{},guitar:{},guitarB:{},guitar2:{},guitar2B:{},bass:{},drums:{}};
   if(d.tracks){ for(const tr of TRACKS) if(d.tracks[tr]) S.tracks[tr]=d.tracks[tr]; }
   else if(Array.isArray(d.melody)){ d.melody.forEach(k=>S.tracks.piano[k]=1); }
   else if(d.melody){ S.tracks.piano=d.melody; }
@@ -1762,8 +1786,8 @@ function exportMidi(){
     {t:0,d:[0xff,0x51,0x03,(usPerBeat>>16)&255,(usPerBeat>>8)&255,usPerBeat&255]},
     {t:0,d:[0xff,0x58,0x04,S.beatsPerBar,2,24,8]},
   ]));
-  const GM={piano:0, piano2:0, guitar:25, guitar2:27, bass:33}; // guitar2=エレキ(クリーン)
-  const CHNAME={piano:'Piano', piano2:'Piano 2', guitar:'Ac.Guitar', guitar2:'E.Guitar', bass:'Bass', drums:'Drums'};
+  const GM={piano:0, piano2:0, guitar:25, guitarB:25, guitar2:29, guitar2B:29, bass:33}; // 29=Overdriven Guitar
+  const CHNAME={piano:'Piano', piano2:'Piano 2', guitar:'Ac.Guitar', guitarB:'Ac.Guitar 2', guitar2:'E.Guitar', guitar2B:'E.Guitar 2', bass:'Bass', drums:'Drums'};
   TRACKS.forEach((tr,ti)=>{
     const mel=S.tracks[tr], keys=Object.keys(mel); if(!keys.length) return;
     const ch=(tr==='drums')?9:ti; const ev=[];
@@ -1781,7 +1805,7 @@ function exportMidi(){
   // コード進行トラック（ch6・ピアノ音色。ch0-4は楽器トラック、ch9はドラムが使用）
   const cs=chordStarts();
   if(cs.length){
-    const ch=6, ev=[{t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb('Chords'))]},{t:0,d:[0xC0|ch,0]}];
+    const ch=8, ev=[{t:0,d:[0xff,0x03,...(k=>[k.length,...k])(sb('Chords'))]},{t:0,d:[0xC0|ch,0]}]; // ch0-6=楽器/ch9=ドラム
     cs.forEach(c=>{ if(c.ch.rest) return; // 空白は書き出さない
       const st=c.start*stepTicks, du=Math.max(1,c.steps*stepTicks);
       chordMidis(c.ch.root,c.ch.q,48).forEach(n=>{
@@ -1844,7 +1868,8 @@ async function exportWav(){
     try{ comp.attack.value=0.003; comp.release.value=0.12; }catch(e){}
     const master=ctx.createGain(); master.gain.value=1.6; master.connect(comp); comp.connect(ctx.destination);
     const tg={}; TRACKS.forEach(tr=>{ const g=ctx.createGain(); g.gain.value=S.mixer[tr].vol;
-      const out=(tr==='guitar'||tr==='guitar2')? makeGuitarBus(ctx,master) : master; // 再生と同じギターバス
+      const out=(tr==='guitar'||tr==='guitarB')? makeGuitarBus(ctx,master)
+              : (tr==='guitar2'||tr==='guitar2B')? makeRockBus(ctx,master) : master; // 再生と同じバス構成
       g.connect(out); tg[tr]=g; });
     const cg=ctx.createGain(); cg.gain.value=S.chord.vol; cg.connect(master); // 伴奏専用チャンネル（再生と同じ独立音量）
     const anySolo=TRACKS.some(t=>S.mixer[t].solo);
@@ -2721,25 +2746,30 @@ $('btnPreset').addEventListener('click',()=>{
 });
 
 /* ================= ドラムパターン（コードのように貼り付け） ================= */
-// キット行のmidi（DRUM_KITと一致させる）。hat=閉ハット/open=開ハット/crash=シンバル
-const DRUM_KICK=60, DRUM_SNARE=70, DRUM_HAT=79, DRUM_OPEN=82, DRUM_CRASH=84;
-const DRUM_PATTERNS={
-  // crash は先頭小節の頭だけ／open は指定stepで開ハット
-  eight: {kick:[0,8],      snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]}, // 8ビート
-  four:  {kick:[0,4,8,12], snare:[4,12], hat:[2,6,10,14], open:[14], crash:[0]}, // 四つ打ち
-  rock:  {kick:[0,6,8],    snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]}, // ロック（シンコペ）
-  ballad:{kick:[0],        snare:[8],    hat:[0,4,8,12]},           // バラード（ゆったり）
+// パターン表記→キット行midi（DRUM_KITと一致させる）
+const DRUM_ROW={kick:60, tomF:62, tomL:64, tomM:66, tomH:68, snare:70, clap:72, rim:74,
+  tamb:76, hat:79, ride:81, open:82, crash:84};
+const DRUM_PATTERNS={ // crashは先頭小節の頭だけ、それ以外は毎小節くり返し
+  eight:  {kick:[0,8],      snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]},           // 8ビート
+  sixteen:{kick:[0,10],     snare:[4,12], hat:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], crash:[0]}, // 16ビート
+  four:   {kick:[0,4,8,12], snare:[4,12], hat:[2,6,10,14], open:[14], crash:[0]},          // 四つ打ち
+  dance:  {kick:[0,4,8,12], clap:[4,12],  open:[2,6,10,14], crash:[0]},                    // ダンス（クラップ＋裏の開ハット）
+  rock:   {kick:[0,6,8],    snare:[4,12], hat:[0,2,4,6,8,10,12,14], crash:[0]},            // ロック（シンコペ）
+  funk:   {kick:[0,7,10],   snare:[4,12], hat:[0,2,4,6,8,10,12,14], open:[3]},             // ファンク（16分裏のキック）
+  shuffle:{kick:[0,8],      snare:[4,12], hat:[0,3,4,7,8,11,12,15]},                       // シャッフル（ハネる）
+  ride8:  {kick:[0,8],      snare:[4,12], ride:[0,2,4,6,8,10,12,14], crash:[0]},           // ライドビート（サビ向き）
+  ballad: {kick:[0],        snare:[8],    hat:[0,4,8,12], tamb:[4,12]},                    // バラード（タンバリン添え）
 };
 function applyDrumPattern(key){
   const p=DRUM_PATTERNS[key]; if(!p) return;
   const bars=totalBars(), spb=SPB(), d={};
   for(let b=0;b<bars;b++){
     const base=b*spb;
-    p.kick .forEach(s=>{ if(s<spb) d[DRUM_KICK +':'+(base+s)]=1; });
-    p.snare.forEach(s=>{ if(s<spb) d[DRUM_SNARE+':'+(base+s)]=1; });
-    p.hat  .forEach(s=>{ if(s<spb) d[DRUM_HAT  +':'+(base+s)]=1; });
-    (p.open||[]).forEach(s=>{ if(s<spb) d[DRUM_OPEN+':'+(base+s)]=1; });
-    if(b===0) (p.crash||[]).forEach(s=>{ if(s<spb) d[DRUM_CRASH+':'+(base+s)]=1; }); // シンバルは曲頭のみ
+    for(const piece in p){
+      const row=DRUM_ROW[piece]; if(row==null) continue;
+      if(piece==='crash' && b!==0) continue; // シンバルは曲頭のみ
+      p[piece].forEach(s=>{ if(s<spb) d[row+':'+(base+s)]=1; });
+    }
   }
   S.tracks.drums=d;
   S.activeTrack='drums'; const el=$('instSel'); if(el) el.value='drums';
@@ -2750,8 +2780,8 @@ document.querySelectorAll('[data-drum]').forEach(btn=>{
 });
 
 /* ================= ミキサー（音量・ミュート・ソロ） ================= */
-const TRACK_ICON={piano:'🎹',piano2:'🎹',guitar:'🎸',guitar2:'🎸',bass:'🎻',drums:'🥁'};
-const TRACK_JA={piano:'ピアノ',piano2:'ピアノ2',guitar:'アコギ',guitar2:'エレキ',bass:'ベース',drums:'ドラム'};
+const TRACK_ICON={piano:'🎹',piano2:'🎹',guitar:'🎸',guitarB:'🎸',guitar2:'🎸',guitar2B:'🎸',bass:'🎻',drums:'🥁'};
+const TRACK_JA={piano:'ピアノ',piano2:'ピアノ2',guitar:'アコギ',guitarB:'アコギ2',guitar2:'エレキ',guitar2B:'エレキ2',bass:'ベース',drums:'ドラム'};
 function renderMixer(){
   const box=$('mixer'); if(!box) return;
   box.innerHTML='';
@@ -3533,7 +3563,7 @@ function renderHowto(){
       <p>中央の大きな編集エリアが<b>ピアノロール</b>。上から順に：</p>
       <ul>
         <li><b>コードレーン</b>（青い帯）… 曲のコード進行を並べる場所</li>
-        <li><b>6つのトラック</b>… 🎹ピアノ×2 / 🎸<b>アコギ＋エレキ</b> / 🎸ベース / 🥁ドラム。ピアノは2レーン、ギターはアコースティックとエレキ（クリーン）の2種類。<b>コード弾きとリフ</b>で使い分けられます（各レーンの左に楽器名）</li>
+        <li><b>8つのトラック</b>… 🎹ピアノ×2 / 🎸<b>アコギ×2＋エレキ×2</b> / 🎸ベース / 🥁ドラム。アコギ曲なら「アコギでコード＋アコギ2でメロディ」のように、同じ楽器で<b>コード弾きとリフ</b>を分けられます（各レーンの左に楽器名）</li>
         <li>いちばん下の<b>鍵盤</b>… クリックで音が鳴る（PCキーの Z列・Q列でも演奏可）</li>
         <li>左の<b>インスペクタ</b>… パレット・保存・ミキサーなどの道具箱</li>
         <li><b>ロールの縦線</b>… <b>太く明るい線＝小節の区切り</b>／中間の線＝拍（1拍ごと）／かすかな線＝16分音符のマス目です</li>
