@@ -2941,7 +2941,9 @@ function animate(){
     const bar=Math.floor(lastDisp.step/SPB()), beat=Math.floor(lastDisp.step%SPB()/4);
     $('pos').textContent=(bar+1)+'.'+(beat+1);
     const cs=chordStartList.find(c=>lastDisp.step>=c.start && lastDisp.step<c.start+c.steps);
-    litChord(cs? new Set(CHORD[cs.ch.q].iv.map(iv=>(cs.ch.root+iv)%12)) : null);
+    // 空白（無コード）ブロック上ではハイライトなし。ここで例外を出すとrAFループが
+    // 止まり「白いバーが途中で固まる」ため、restと未知の種別を必ずガードする
+    litChord(cs && !cs.ch.rest && CHORD[cs.ch.q] ? new Set(CHORD[cs.ch.q].iv.map(iv=>(cs.ch.root+iv)%12)) : null);
     const sc=$('tlScroll');
     if(x > sc.scrollLeft+sc.clientWidth-80) sc.scrollLeft=x-120;
     if(x < sc.scrollLeft+KEYW) sc.scrollLeft=Math.max(0,x-120);
